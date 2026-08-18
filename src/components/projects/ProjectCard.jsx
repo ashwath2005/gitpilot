@@ -1,23 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   GitBranch,
-  Folder,
-  ArrowUpRight,
   RefreshCw,
   FileCode,
-  CheckCircle2,
-  AlertCircle,
   Clock,
-  Trash2,
+  MoreHorizontal,
   Play,
+  Trash2,
+  Copy,
+  ExternalLink,
+  Check,
 } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 
 export function ProjectCard({ repository, onCommitPreview, onOpenDiff }) {
   const navigate = useNavigate();
   const { updateRepository, scanRepository, deleteRepository } = useProjectStore();
-  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    };
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [menuOpen]);
 
   const getStatusBadge = () => {
     switch (repository.status) {
@@ -52,10 +66,20 @@ export function ProjectCard({ repository, onCommitPreview, onOpenDiff }) {
     return 'Not scanned yet';
   };
 
+  const handleCopyPath = (e) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(repository.path);
+    setCopied(true);
+    setTimeout(() => {
+      setCopied(false);
+      setMenuOpen(false);
+    }, 1200);
+  };
+
   const handleDelete = (e) => {
     e.stopPropagation();
     deleteRepository(repository.id);
-    setShowConfirmDelete(false);
+    setMenuOpen(false);
   };
 
   return (
@@ -68,56 +92,11 @@ export function ProjectCard({ repository, onCommitPreview, onOpenDiff }) {
         display: 'flex',
         flexDirection: 'column',
         gap: '12px',
-        transition: 'border-color var(--transition-fast), transform var(--transition-fast)',
+        transition: 'border-color var(--transition-fast)',
         position: 'relative',
       }}
       className="project-card"
     >
-      {/* Delete Confirmation Overlay */}
-      {showConfirmDelete && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundColor: 'rgba(11, 11, 13, 0.95)',
-            backdropFilter: 'blur(2px)',
-            borderRadius: 'var(--radius-md)',
-            zIndex: 10,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '16px',
-            textAlign: 'center',
-            gap: '10px',
-          }}
-        >
-          <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-            Remove from GitPilot?
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            Your local files on disk will NOT be deleted.
-          </div>
-          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowConfirmDelete(false);
-              }}
-              className="btn btn-secondary btn-sm"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleDelete}
-              className="btn btn-danger btn-sm"
-            >
-              Remove
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
@@ -127,6 +106,7 @@ export function ProjectCard({ repository, onCommitPreview, onOpenDiff }) {
               height: '8px',
               borderRadius: '50%',
               backgroundColor: repository.enabled ? 'var(--primary-bright)' : 'var(--text-disabled)',
+              flexShrink: 0,
             }}
           />
           <h3
@@ -148,6 +128,8 @@ export function ProjectCard({ repository, onCommitPreview, onOpenDiff }) {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           {getStatusBadge()}
+          
+          {/* Automation Switch */}
           <button
             onClick={() => updateRepository(repository.id, { enabled: !repository.enabled })}
             className="btn-ghost"
@@ -164,22 +146,143 @@ export function ProjectCard({ repository, onCommitPreview, onOpenDiff }) {
           >
             {repository.enabled ? 'ON' : 'OFF'}
           </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowConfirmDelete(true);
-            }}
-            className="btn-ghost"
-            style={{
-              padding: '3px 5px',
-              borderRadius: '3px',
-              cursor: 'pointer',
-              color: 'var(--text-muted)',
-            }}
-            title="Remove repository from GitPilot"
-          >
-            <Trash2 size={12} />
-          </button>
+
+          {/* Context Menu Dropdown */}
+          <div style={{ position: 'relative' }} ref={menuRef}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen(!menuOpen);
+              }}
+              className="btn-ghost"
+              style={{
+                padding: '4px 6px',
+                borderRadius: '4px',
+                border: 'none',
+                cursor: 'pointer',
+                color: menuOpen ? 'var(--text-primary)' : 'var(--text-muted)',
+                backgroundColor: menuOpen ? 'var(--bg-elevated)' : 'transparent',
+              }}
+              title="More actions"
+            >
+              <MoreHorizontal size={14} />
+            </button>
+
+            {menuOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  right: 0,
+                  top: '100%',
+                  marginTop: '4px',
+                  backgroundColor: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-sm)',
+                  boxShadow: 'var(--shadow-md)',
+                  padding: '4px',
+                  minWidth: '170px',
+                  zIndex: 50,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '2px',
+                  animation: 'fadeIn 120ms ease',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => {
+                    scanRepository(repository.id);
+                    setMenuOpen(false);
+                  }}
+                  className="btn-ghost"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '6px 10px',
+                    fontSize: '12px',
+                    width: '100%',
+                    justifyContent: 'flex-start',
+                    borderRadius: 'var(--radius-xs)',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer',
+                    border: 'none',
+                  }}
+                >
+                  <RefreshCw size={13} />
+                  <span>Scan for changes</span>
+                </button>
+
+                <button
+                  onClick={handleCopyPath}
+                  className="btn-ghost"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '6px 10px',
+                    fontSize: '12px',
+                    width: '100%',
+                    justifyContent: 'flex-start',
+                    borderRadius: 'var(--radius-xs)',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer',
+                    border: 'none',
+                  }}
+                >
+                  {copied ? <Check size={13} style={{ color: 'var(--success)' }} /> : <Copy size={13} />}
+                  <span>{copied ? 'Path copied!' : 'Copy path'}</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    navigate(`/projects/${repository.id}`);
+                    setMenuOpen(false);
+                  }}
+                  className="btn-ghost"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '6px 10px',
+                    fontSize: '12px',
+                    width: '100%',
+                    justifyContent: 'flex-start',
+                    borderRadius: 'var(--radius-xs)',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer',
+                    border: 'none',
+                  }}
+                >
+                  <ExternalLink size={13} />
+                  <span>Project details</span>
+                </button>
+
+                <div style={{ height: '1px', backgroundColor: 'var(--border-subtle)', margin: '3px 0' }} />
+
+                <button
+                  onClick={handleDelete}
+                  className="btn-ghost"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '6px 10px',
+                    fontSize: '12px',
+                    width: '100%',
+                    justifyContent: 'flex-start',
+                    borderRadius: 'var(--radius-xs)',
+                    color: 'var(--danger)',
+                    cursor: 'pointer',
+                    border: 'none',
+                  }}
+                >
+                  <Trash2 size={13} />
+                  <span>Remove repository</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
