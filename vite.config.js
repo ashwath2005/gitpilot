@@ -29,9 +29,14 @@ function localDesktopBridgePlugin() {
             const { action, payload } = JSON.parse(body || '{}');
 
             if (action === 'git-exec') {
-              const { cwd, command } = payload;
+              let { cwd, command } = payload;
+              // Clean up and normalize path
+              if (cwd) {
+                cwd = path.resolve(cwd.replace(/^["']|["']$/g, '').trim());
+              }
+
               // Validate that git executable is used safely
-              if (!command.startsWith('git ')) {
+              if (!command || !command.startsWith('git ')) {
                 res.statusCode = 400;
                 res.end(JSON.stringify({ success: false, error: 'Only git commands are allowed' }));
                 return;
@@ -58,8 +63,35 @@ function localDesktopBridgePlugin() {
               return;
             }
 
+            if (action === 'init-git') {
+              let { directoryPath } = payload;
+              if (directoryPath) {
+                directoryPath = path.resolve(directoryPath.replace(/^["']|["']$/g, '').trim());
+              }
+
+              if (!fs.existsSync(directoryPath)) {
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: false, error: 'Directory does not exist' }));
+                return;
+              }
+
+              try {
+                await execAsync('git init -b main', { cwd: directoryPath });
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: true, path: directoryPath }));
+              } catch (e) {
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: false, error: e.message }));
+              }
+              return;
+            }
+
             if (action === 'scan-workspace') {
-              const { directoryPath } = payload;
+              let { directoryPath } = payload;
+              if (directoryPath) {
+                directoryPath = path.resolve(directoryPath.replace(/^["']|["']$/g, '').trim());
+              }
+
               if (!fs.existsSync(directoryPath)) {
                 res.setHeader('Content-Type', 'application/json');
                 res.end(JSON.stringify({ success: false, error: 'Directory does not exist' }));

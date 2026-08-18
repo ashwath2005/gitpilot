@@ -13,11 +13,10 @@ export const useProjectStore = create((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       let repos = await databaseService.getRepositories();
-      // If first time and empty, add initial workspace discovery if available
-      if (repos.length === 0) {
-        repos = [];
-      }
       set({ repositories: repos, isLoading: false });
+
+      // Run live scan for accurate branch and changes on initial load
+      get().scanAll();
     } catch (err) {
       set({ error: err.message, isLoading: false });
     }
@@ -38,7 +37,7 @@ export const useProjectStore = create((set, get) => ({
       const statusRes = await gitService.getStatus(path);
 
       const newRepo = await databaseService.addRepository({
-        name: name || path.split(/[\\/]/).pop(),
+        name: name || path.split(/[\\/]/).filter(Boolean).pop(),
         path,
         branch: validation.branch,
         remoteUrl: validation.remoteUrl,

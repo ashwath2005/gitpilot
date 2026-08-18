@@ -5,6 +5,7 @@
 
 const STORAGE_KEYS = {
   REPOSITORIES: 'gitpilot_repositories',
+  REMOVED_REPOS: 'gitpilot_removed_repos',
   SCHEDULES: 'gitpilot_schedules',
   PUSH_HISTORY: 'gitpilot_push_history',
   SETTINGS: 'gitpilot_settings',
@@ -29,11 +30,111 @@ const DEFAULT_SETTINGS = {
   theme: 'dark',
 };
 
+// Default discovered user project configurations
+const DEFAULT_USER_REPOSITORIES = [
+  {
+    id: 'repo_dsa_vis',
+    name: 'DSA VIS (ALGO3D)',
+    path: 'D:\\DSA VIS',
+    remoteUrl: 'git@github.com:ashwath2005/ALGO3D-.git',
+    remoteName: 'origin',
+    branch: 'main',
+    enabled: true,
+    status: 'READY',
+    filesChanged: 0,
+  },
+  {
+    id: 'repo_anburajan_uncle',
+    name: 'Anburajan Uncle',
+    path: 'D:\\Anburajan Uncle',
+    remoteUrl: 'https://github.com/ashwath2005/anburajan-uncle.git',
+    remoteName: 'origin',
+    branch: 'main',
+    enabled: true,
+    status: 'CHANGES',
+    filesChanged: 136,
+  },
+  {
+    id: 'repo_portfolio',
+    name: 'Portfolio',
+    path: 'D:\\Portfolio',
+    remoteUrl: 'git@github.com:ashwath2005/portfolio.git',
+    remoteName: 'origin',
+    branch: 'main',
+    enabled: true,
+    status: 'READY',
+    filesChanged: 0,
+  },
+  {
+    id: 'repo_genai_capstone',
+    name: 'FRESH GENAI CAPSTONE PROJECT',
+    path: 'D:\\FRESH GENAI CAPSTONE PROJECT',
+    remoteUrl: 'git@github.com:ashwath2005/archon-ai-governance-hub.git',
+    remoteName: 'origin',
+    branch: 'main',
+    enabled: true,
+    status: 'CHANGES',
+    filesChanged: 1,
+  },
+  {
+    id: 'repo_final_year',
+    name: 'Final Year',
+    path: 'D:\\FInal Year',
+    remoteUrl: 'local',
+    remoteName: 'origin',
+    branch: 'main',
+    enabled: true,
+    status: 'READY',
+    filesChanged: 0,
+  },
+  {
+    id: 'repo_gitpilot',
+    name: 'GitPilot',
+    path: 'd:\\GitPilot',
+    remoteUrl: 'local',
+    remoteName: 'origin',
+    branch: 'main',
+    enabled: true,
+    status: 'READY',
+    filesChanged: 0,
+  },
+];
+
 export const databaseService = {
   // --- Repositories ---
   async getRepositories() {
     const raw = localStorage.getItem(STORAGE_KEYS.REPOSITORIES);
-    return raw ? JSON.parse(raw) : [];
+    const removedRaw = localStorage.getItem(STORAGE_KEYS.REMOVED_REPOS);
+    const removedSet = new Set(removedRaw ? JSON.parse(removedRaw) : []);
+
+    let repos = raw ? JSON.parse(raw) : [];
+
+    // Automatically ensure all user workspaces are included unless user explicitly deleted them
+    let updated = false;
+    for (const defaultRepo of DEFAULT_USER_REPOSITORIES) {
+      if (removedSet.has(defaultRepo.id) || removedSet.has(defaultRepo.path.toLowerCase())) {
+        continue;
+      }
+      const exists = repos.some(
+        (r) => (r.path || '').toLowerCase() === defaultRepo.path.toLowerCase()
+      );
+      if (!exists) {
+        repos.push({
+          ...defaultRepo,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          lastScanAt: new Date().toISOString(),
+          lastPushAt: null,
+        });
+        updated = true;
+      }
+    }
+
+    if (updated || !raw) {
+      localStorage.setItem(STORAGE_KEYS.REPOSITORIES, JSON.stringify(repos));
+    }
+
+    return repos;
   },
 
   async saveRepositories(repositories) {
@@ -42,20 +143,29 @@ export const databaseService = {
 
   async addRepository(repo) {
     const repos = await this.getRepositories();
-    const existing = repos.find((r) => r.path === repo.path);
+    const existing = repos.find((r) => r.path.toLowerCase() === repo.path.toLowerCase());
     if (existing) {
-      throw new Error(`Repository at path "${repo.path}" is already registered`);
+      return await this.updateRepository(existing.id, repo);
+    }
+
+    // Un-mark from removed list if user re-adds
+    const removedRaw = localStorage.getItem(STORAGE_KEYS.REMOVED_REPOS);
+    if (removedRaw) {
+      const list = JSON.parse(removedRaw).filter(
+        (p) => p !== repo.id && p !== repo.path.toLowerCase()
+      );
+      localStorage.setItem(STORAGE_KEYS.REMOVED_REPOS, JSON.stringify(list));
     }
 
     const newRepo = {
       id: repo.id || `repo_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-      name: repo.name || repo.path.split(/[\\/]/).pop(),
+      name: repo.name || repo.path.split(/[\\/]/).filter(Boolean).pop() || 'Repository',
       path: repo.path,
       remoteUrl: repo.remoteUrl || 'local',
       remoteName: repo.remoteName || 'origin',
       branch: repo.branch || 'main',
       enabled: repo.enabled !== false,
-      status: 'READY', // READY, CHANGES, ANALYZING, COMMITTING, PUSHING, SUCCESS, FAILED, NO_CHANGES
+      status: 'READY',
       statusMessage: '',
       filesChanged: 0,
       createdAt: new Date().toISOString(),
@@ -82,7 +192,18 @@ export const databaseService = {
 
   async deleteRepository(id) {
     const repos = await this.getRepositories();
+    const target = repos.find((r) => r.id === id);
     const filtered = repos.filter((r) => r.id !== id);
+
+    // Track removal so it won't auto-repopulate
+    if (target) {
+      const removedRaw = localStorage.getItem(STORAGE_KEYS.REMOVED_REPOS);
+      const list = removedRaw ? JSON.parse(removedRaw) : [];
+      list.push(target.id);
+      if (target.path) list.push(target.path.toLowerCase());
+      localStorage.setItem(STORAGE_KEYS.REMOVED_REPOS, JSON.stringify(list));
+    }
+
     await this.saveRepositories(filtered);
   },
 
@@ -100,14 +221,13 @@ export const databaseService = {
       repositoryName: entry.repositoryName,
       commitHash: entry.commitHash || null,
       commitMessage: entry.commitMessage || '',
-      status: entry.status, // SUCCESS, FAILED, NO_CHANGES, SKIPPED, CANCELLED
+      status: entry.status,
       error: entry.error || null,
       filesChanged: entry.filesChanged || 0,
       createdAt: new Date().toISOString(),
     };
 
     history.unshift(newEntry);
-    // Keep last 1000 history entries
     if (history.length > 1000) history.pop();
     localStorage.setItem(STORAGE_KEYS.PUSH_HISTORY, JSON.stringify(history));
     return newEntry;
@@ -117,15 +237,14 @@ export const databaseService = {
   async getSchedules() {
     const raw = localStorage.getItem(STORAGE_KEYS.SCHEDULES);
     if (!raw) {
-      // Create initial default daily 7:00 PM schedule
       const defaultSchedule = [
         {
           id: 'sched_default_daily',
-          name: 'Daily Automation',
+          name: 'Daily Evening Sync',
           time: '19:00',
-          frequency: 'daily', // daily, weekdays, weekends, custom
+          frequency: 'daily',
           enabled: true,
-          repositoryIds: 'all', // 'all' or array of IDs
+          repositoryIds: 'all',
           createdAt: new Date().toISOString(),
         },
       ];
@@ -160,7 +279,7 @@ export const databaseService = {
     const entry = {
       id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       timestamp: new Date().toISOString(),
-      level, // INFO, WARN, ERROR, SUCCESS
+      level,
       message,
       metadata,
     };

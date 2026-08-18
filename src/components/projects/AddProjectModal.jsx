@@ -1,53 +1,66 @@
 import React, { useState, useEffect } from 'react';
-import { X, Folder, CheckCircle, AlertCircle, Loader2, Sparkles } from 'lucide-react';
+import { X, Folder, CheckCircle, AlertCircle, Loader2, Sparkles, PlusCircle } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { gitService } from '../../services/git/gitService';
+import { desktopBridge } from '../../services/desktopBridge';
 
 export function AddProjectModal({ isOpen, onClose }) {
   const [path, setPath] = useState('');
   const [customName, setCustomName] = useState('');
   const [isValidating, setIsValidating] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
   const [error, setError] = useState(null);
+  const [canInitGit, setCanInitGit] = useState(false);
   const { addRepository } = useProjectStore();
 
   useEffect(() => {
     if (isOpen) {
       setError(null);
       setValidationResult(null);
+      setCanInitGit(false);
     }
   }, [isOpen]);
 
-  // Auto-validate with debounce when user finishes typing a path
+  // Clean path format (trim quotes and spaces)
+  const cleanPath = (raw) => (raw || '').replace(/^["']|["']$/g, '').trim();
+
+  // Auto-validate with debounce
   useEffect(() => {
-    if (!path.trim() || path.trim().length < 3) {
+    const cleaned = cleanPath(path);
+    if (!cleaned || cleaned.length < 3) {
       setValidationResult(null);
       setError(null);
+      setCanInitGit(false);
       return;
     }
 
     const timer = setTimeout(async () => {
       setIsValidating(true);
       setError(null);
+      setCanInitGit(false);
+
       try {
-        const res = await gitService.validateRepository(path.trim());
+        const res = await gitService.validateRepository(cleaned);
         if (res.valid) {
           setValidationResult(res);
           if (!customName) {
-            const name = path.trim().split(/[\\/]/).filter(Boolean).pop() || 'Repo';
+            const name = cleaned.split(/[\\/]/).filter(Boolean).pop() || 'Repo';
             setCustomName(name);
           }
         } else {
           setValidationResult(null);
-          setError(res.error || 'Path is not a valid Git repository');
+          setError(res.error || 'Not a valid Git repository');
+          setCanInitGit(true);
         }
       } catch (err) {
         setValidationResult(null);
         setError(err.message);
+        setCanInitGit(true);
       } finally {
         setIsValidating(false);
       }
-    }, 400);
+    }, 350);
 
     return () => clearTimeout(timer);
   }, [path, customName]);
@@ -55,35 +68,59 @@ export function AddProjectModal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   const handleValidateNow = async () => {
-    if (!path.trim()) return null;
+    const cleaned = cleanPath(path);
+    if (!cleaned) return null;
     setIsValidating(true);
     setError(null);
+    setCanInitGit(false);
 
     try {
-      const res = await gitService.validateRepository(path.trim());
+      const res = await gitService.validateRepository(cleaned);
       if (res.valid) {
         setValidationResult(res);
         if (!customName) {
-          const name = path.trim().split(/[\\/]/).filter(Boolean).pop() || 'Repo';
+          const name = cleaned.split(/[\\/]/).filter(Boolean).pop() || 'Repo';
           setCustomName(name);
         }
         return res;
       } else {
-        setError(res.error || 'Path is not a valid Git repository');
+        setError(res.error || 'Not a valid Git repository');
+        setCanInitGit(true);
         return null;
       }
     } catch (err) {
       setError(err.message);
+      setCanInitGit(true);
       return null;
     } finally {
       setIsValidating(false);
     }
   };
 
-  const handleSave = async () => {
-    if (!path.trim()) return;
+  const handleInitGit = async () => {
+    const cleaned = cleanPath(path);
+    if (!cleaned) return;
+    setIsInitializing(true);
+    try {
+      const res = await desktopBridge.initGit(cleaned);
+      if (res.success) {
+        setCanInitGit(false);
+        setError(null);
+        await handleValidateNow();
+      } else {
+        setError(res.error || 'Failed to initialize Git in directory');
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setIsInitializing(false);
+    }
+  };
 
-    // If not validated yet, validate first
+  const handleSave = async () => {
+    const cleaned = cleanPath(path);
+    if (!cleaned) return;
+
     let validRes = validationResult;
     if (!validRes) {
       validRes = await handleValidateNow();
@@ -91,7 +128,7 @@ export function AddProjectModal({ isOpen, onClose }) {
     }
 
     try {
-      await addRepository(path.trim(), customName.trim());
+      await addRepository(cleaned, customName.trim());
       onClose();
       setPath('');
       setCustomName('');
@@ -99,10 +136,6 @@ export function AddProjectModal({ isOpen, onClose }) {
     } catch (err) {
       setError(err.message);
     }
-  };
-
-  const handleQuickSelect = (suggestedPath) => {
-    setPath(suggestedPath);
   };
 
   return (
@@ -131,7 +164,7 @@ export function AddProjectModal({ isOpen, onClose }) {
                 <button
                   key={s}
                   type="button"
-                  onClick={() => handleQuickSelect(s)}
+                  onClick={() => setPath(s)}
                   className="btn-ghost font-mono"
                   style={{
                     fontSize: '11px',
@@ -188,7 +221,7 @@ export function AddProjectModal({ isOpen, onClose }) {
                 </div>
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Remote: </span>
-                  <span className="font-mono" style={{ color: 'var(--text-primary)' }}>{validationResult.remoteName}</span>
+                  <span className="font-mono" style={{ color: 'var(--text-primary)' }}>{validationResult.remoteName || 'local'}</span>
                 </div>
                 <div style={{ gridColumn: 'span 2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   <span style={{ color: 'var(--text-muted)' }}>URL: </span>
@@ -199,9 +232,28 @@ export function AddProjectModal({ isOpen, onClose }) {
           )}
 
           {error && (
-            <div style={{ background: 'var(--danger-subtle)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 'var(--radius-sm)', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)', fontSize: '12px' }}>
-              <AlertCircle size={14} style={{ flexShrink: 0 }} />
-              <span>{error}</span>
+            <div style={{ background: 'var(--danger-subtle)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 'var(--radius-sm)', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)', fontSize: '12px' }}>
+                <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                <span>{error}</span>
+              </div>
+              {canInitGit && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(239, 68, 68, 0.15)', paddingTop: '8px' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    Want to initialize Git in this folder?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleInitGit}
+                    disabled={isInitializing}
+                    className="btn btn-secondary btn-sm"
+                    style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    {isInitializing ? <Loader2 size={12} className="animate-spin" /> : <PlusCircle size={12} />}
+                    <span>Initialize (git init)</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

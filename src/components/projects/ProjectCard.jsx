@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   GitBranch,
@@ -9,14 +9,15 @@ import {
   CheckCircle2,
   AlertCircle,
   Clock,
-  MoreVertical,
+  Trash2,
   Play,
 } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 
 export function ProjectCard({ repository, onCommitPreview, onOpenDiff }) {
   const navigate = useNavigate();
-  const { updateRepository, scanRepository } = useProjectStore();
+  const { updateRepository, scanRepository, deleteRepository } = useProjectStore();
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
   const getStatusBadge = () => {
     switch (repository.status) {
@@ -51,6 +52,12 @@ export function ProjectCard({ repository, onCommitPreview, onOpenDiff }) {
     return 'Not scanned yet';
   };
 
+  const handleDelete = (e) => {
+    e.stopPropagation();
+    deleteRepository(repository.id);
+    setShowConfirmDelete(false);
+  };
+
   return (
     <div
       style={{
@@ -66,6 +73,51 @@ export function ProjectCard({ repository, onCommitPreview, onOpenDiff }) {
       }}
       className="project-card"
     >
+      {/* Delete Confirmation Overlay */}
+      {showConfirmDelete && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundColor: 'rgba(11, 11, 13, 0.95)',
+            backdropFilter: 'blur(2px)',
+            borderRadius: 'var(--radius-md)',
+            zIndex: 10,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            textAlign: 'center',
+            gap: '10px',
+          }}
+        >
+          <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+            Remove from GitPilot?
+          </div>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            Your local files on disk will NOT be deleted.
+          </div>
+          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowConfirmDelete(false);
+              }}
+              className="btn btn-secondary btn-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDelete}
+              className="btn btn-danger btn-sm"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
@@ -108,8 +160,25 @@ export function ProjectCard({ repository, onCommitPreview, onOpenDiff }) {
               cursor: 'pointer',
               color: repository.enabled ? 'var(--success)' : 'var(--text-muted)',
             }}
+            title={repository.enabled ? 'Automation is Enabled' : 'Automation is Disabled'}
           >
             {repository.enabled ? 'ON' : 'OFF'}
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowConfirmDelete(true);
+            }}
+            className="btn-ghost"
+            style={{
+              padding: '3px 5px',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              color: 'var(--text-muted)',
+            }}
+            title="Remove repository from GitPilot"
+          >
+            <Trash2 size={12} />
           </button>
         </div>
       </div>

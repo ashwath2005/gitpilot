@@ -63,6 +63,25 @@ export const desktopBridge = {
   },
 
   /**
+   * Initialize a new Git repository in a folder
+   */
+  async initGit(directoryPath) {
+    try {
+      const res = await fetch('/api/desktop-bridge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'init-git',
+          payload: { directoryPath },
+        }),
+      });
+      return await res.json();
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  /**
    * Scan parent directory for subfolders that are Git repositories
    */
   async scanWorkspace(directoryPath) {
