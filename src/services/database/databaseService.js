@@ -31,7 +31,7 @@ const DEFAULT_SETTINGS = {
   theme: 'dark',
 };
 
-// Known legacy developer demo IDs from pre-v1.2 builds to purge from existing local storage
+// Known legacy developer demo IDs and paths from pre-v1.2 builds to purge from existing local storage
 const LEGACY_DEV_REPO_IDS = new Set([
   'repo_dsa_vis',
   'repo_anburajan_uncle',
@@ -39,6 +39,15 @@ const LEGACY_DEV_REPO_IDS = new Set([
   'repo_genai_capstone',
   'repo_final_year',
   'repo_gitpilot',
+]);
+
+const LEGACY_DEV_PATHS = new Set([
+  'd:\\dsa vis',
+  'd:\\anburajan uncle',
+  'd:\\portfolio',
+  'd:\\fresh genai capstone project',
+  'd:\\final year',
+  'd:\\gitpilot',
 ]);
 
 export const databaseService = {
@@ -58,8 +67,13 @@ export const databaseService = {
     try {
       const repos = JSON.parse(raw);
       if (Array.isArray(repos)) {
-        // Automatically clean up previously cached development repositories
-        const filtered = repos.filter((r) => !LEGACY_DEV_REPO_IDS.has(r.id));
+        // Automatically clean up previously cached development repositories by ID or path
+        const filtered = repos.filter((r) => {
+          const isLegacyId = r.id && LEGACY_DEV_REPO_IDS.has(r.id);
+          const isLegacyPath = r.path && LEGACY_DEV_PATHS.has(r.path.toLowerCase());
+          return !isLegacyId && !isLegacyPath;
+        });
+
         if (filtered.length !== repos.length) {
           localStorage.setItem(STORAGE_KEYS.REPOSITORIES, JSON.stringify(filtered));
           if (filtered.length === 0) {
