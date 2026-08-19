@@ -1,6 +1,6 @@
 ; GitPilot Inno Setup Script
 #define MyAppName "GitPilot"
-#define MyAppVersion "1.2.0"
+#define MyAppVersion "1.3.0"
 #define MyAppPublisher "GitPilot Team"
 #define MyAppURL "https://github.com/ashwath2005/GitPilot"
 #define MyAppExeName "GitPilot.exe"
@@ -16,7 +16,7 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=D:\GitPilot\dist-installer
-OutputBaseFilename=GitPilot-Setup-v1.2.0
+OutputBaseFilename=GitPilot-Setup-v1.3.0
 SetupIconFile=D:\GitPilot\src-tauri\icons\icon.ico
 UninstallDisplayIcon={app}\app.ico
 Compression=lzma2/fast
