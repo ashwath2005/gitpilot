@@ -203,17 +203,6 @@ export function Sidebar({ collapsed, onToggleCollapse, gitStatus }) {
         )}
       </div>
 
-      {/* Footer Git Status Indicator */}
-      <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-surface)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: gitStatus?.valid ? 'var(--success)' : 'var(--danger)' }} />
-          {!collapsed && (
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              Git {gitStatus?.version || 'Ready'}
-            </div>
-          )}
-        </div>
-      </div>
     </aside>
   );
 }

@@ -27,21 +27,46 @@ export function AnalyticsPage() {
     ? Math.round((totalPushes / (totalPushes + failedPushes)) * 100)
     : 100;
 
-  // Mock weekly activity dataset
-  const weeklyData = [
-    { day: 'Mon', pushes: 4, files: 12 },
-    { day: 'Tue', pushes: 7, files: 24 },
-    { day: 'Wed', pushes: 5, files: 18 },
-    { day: 'Thu', pushes: 8, files: 31 },
-    { day: 'Fri', pushes: 6, files: 19 },
-    { day: 'Sat', pushes: 3, files: 8 },
-    { day: 'Sun', pushes: 2, files: 5 },
-  ];
+  // Real Streak computation
+  const calculateRealStreak = () => {
+    if (!history || history.length === 0) return 0;
+    
+    const activeDates = new Set(
+      history
+        .filter((h) => h.status === 'SUCCESS' && h.createdAt)
+        .map((h) => h.createdAt.split('T')[0])
+    );
+
+    if (activeDates.size === 0) return 0;
+
+    let streak = 0;
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    let checkDate = new Date(now);
+
+    if (!activeDates.has(today)) {
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+
+    while (true) {
+      const dateStr = checkDate.toISOString().split('T')[0];
+      if (activeDates.has(dateStr)) {
+        streak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+
+    return streak;
+  };
+
+  const currentStreak = calculateRealStreak();
 
   // Repository contribution breakdown
   const repoActivityData = repositories.map((r) => {
     const count = history.filter((h) => h.repositoryId === r.id && h.status === 'SUCCESS').length;
-    return { name: r.name, pushes: count || Math.floor(Math.random() * 5) + 1 };
+    return { name: r.name, pushes: count };
   });
 
   return (
@@ -68,7 +93,9 @@ export function AnalyticsPage() {
 
         <div style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', padding: '14px' }}>
           <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>Current Streak</div>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--warning)', marginTop: '4px' }}>14 days</div>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: currentStreak > 0 ? 'var(--warning)' : 'var(--text-muted)', marginTop: '4px' }}>
+            {currentStreak} {currentStreak === 1 ? 'day' : 'days'}
+          </div>
         </div>
 
         <div style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', padding: '14px' }}>

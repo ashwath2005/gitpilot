@@ -31,10 +31,19 @@ export function OnboardingModal({ isOpen, onComplete }) {
   const [selectedPaths, setSelectedPaths] = useState(new Set());
   const [automationMode, setAutomationMode] = useState('review'); // 'manual', 'review', 'autonomous'
   const [authView, setAuthView] = useState('choice'); // 'choice', 'login', 'register'
+  const [gitVersion, setGitVersion] = useState('');
 
   const { fetchRepositories } = useProjectStore();
   const { updateSettings } = useSettingsStore();
   const { isAuthenticated, user, profile } = useAuthStore();
+
+  React.useEffect(() => {
+    desktopBridge.checkGit().then((res) => {
+      if (res && res.success) {
+        setGitVersion(res.version || 'Git Engine Ready');
+      }
+    });
+  }, []);
 
   if (!isOpen) return null;
 
@@ -295,6 +304,33 @@ export function OnboardingModal({ isOpen, onComplete }) {
                 <p style={{ color: 'var(--text-secondary)', fontSize: '12.5px', maxWidth: '440px', margin: '0 auto' }}>
                   Connect an account to sync device metadata and subscription features.
                 </p>
+              </div>
+
+              {/* Local Git & GitHub Connection Status */}
+              <div
+                style={{
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '12px 14px',
+                  marginBottom: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <GitBranch size={18} style={{ color: 'var(--primary-bright)', flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: '12.5px', fontWeight: 600 }}>Local Git & GitHub Setup</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      Uses your PC's Windows Git Credential Manager & SSH keys automatically
+                    </div>
+                  </div>
+                </div>
+                <span className="badge badge-success" style={{ fontSize: '10.5px' }}>
+                  {gitVersion || 'Git Engine Ready'}
+                </span>
               </div>
 
               {/* Privacy Notice Card */}

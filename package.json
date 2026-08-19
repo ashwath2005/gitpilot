@@ -30,7 +30,7 @@
       "repo": "GitPilot"
     },
     "directories": {
-      "output": "dist-release"
+      "output": "dist-release-new"
     },
     "files": [
       "dist/**/*",

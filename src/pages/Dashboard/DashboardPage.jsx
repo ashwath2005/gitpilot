@@ -1,4 +1,4 @@
-﻿import React, { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FolderGit2,
@@ -43,8 +43,41 @@ export function DashboardPage({ onOpenAddModal, onOpenScanModal, onCommitPreview
     (h) => h.status === 'SUCCESS' && h.createdAt && h.createdAt.startsWith(todayStr)
   ).length;
 
-  // Streak computation (consecutive active days)
-  const currentStreak = Math.max(1, Math.min(14, todaysPushes > 0 ? 14 : 13));
+  // Real Streak computation (consecutive active days with real pushes)
+  const calculateRealStreak = () => {
+    if (!history || history.length === 0) return 0;
+    
+    const activeDates = new Set(
+      history
+        .filter((h) => h.status === 'SUCCESS' && h.createdAt)
+        .map((h) => h.createdAt.split('T')[0])
+    );
+
+    if (activeDates.size === 0) return 0;
+
+    let streak = 0;
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    let checkDate = new Date(now);
+
+    if (!activeDates.has(today)) {
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+
+    while (true) {
+      const dateStr = checkDate.toISOString().split('T')[0];
+      if (activeDates.has(dateStr)) {
+        streak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+
+    return streak;
+  };
+
+  const currentStreak = calculateRealStreak();
   const changedRepos = repositories.filter((r) => r.status === 'CHANGES' || r.filesChanged > 0);
 
   return (
@@ -83,17 +116,17 @@ export function DashboardPage({ onOpenAddModal, onOpenScanModal, onCommitPreview
       {/* Top Metrics Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
         {/* Metric 1 */}
-        <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <Card style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
             <span style={{ fontSize: '12px', fontWeight: 500 }}>Repositories</span>
-            <FolderGit2 size={15} />
+            <FolderGit2 size={16} />
           </div>
-          <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>
             {totalRepos}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
             {changedRepos.length > 0 ? (
-              <span style={{ color: 'var(--primary-bright)' }}>{changedRepos.length} with pending changes</span>
+              <span style={{ color: 'var(--primary-bright)', fontWeight: 500 }}>{changedRepos.length} with pending changes</span>
             ) : (
               'All working trees clean'
             )}
@@ -101,44 +134,44 @@ export function DashboardPage({ onOpenAddModal, onOpenScanModal, onCommitPreview
         </Card>
 
         {/* Metric 2 */}
-        <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <Card style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
             <span style={{ fontSize: '12px', fontWeight: 500 }}>Automation</span>
-            <Zap size={15} style={{ color: 'var(--primary-bright)' }} />
+            <Zap size={16} style={{ color: 'var(--primary-bright)' }} />
           </div>
-          <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>
             {activeAutomation} <span style={{ fontSize: '14px', fontWeight: 400, color: 'var(--text-muted)' }}>active</span>
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
             Scheduled at {settings.defaultScheduleTime || '19:00'} daily
           </div>
         </Card>
 
         {/* Metric 3 */}
-        <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <Card style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
             <span style={{ fontSize: '12px', fontWeight: 500 }}>Today's Pushes</span>
-            <GitPullRequest size={15} style={{ color: 'var(--success)' }} />
+            <GitPullRequest size={16} style={{ color: 'var(--success)' }} />
           </div>
-          <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>
             {todaysPushes}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--success)' }}>
-            Real development commits
+          <div style={{ fontSize: '11.5px', color: todaysPushes > 0 ? 'var(--success)' : 'var(--text-muted)' }}>
+            {todaysPushes > 0 ? `${todaysPushes} real commits pushed` : 'No automated pushes today'}
           </div>
         </Card>
 
         {/* Metric 4 */}
-        <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <Card style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
             <span style={{ fontSize: '12px', fontWeight: 500 }}>Current Streak</span>
-            <Flame size={15} style={{ color: 'var(--warning)' }} />
+            <Flame size={16} style={{ color: currentStreak > 0 ? 'var(--warning)' : 'var(--text-muted)' }} />
           </div>
-          <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>
-            {currentStreak} <span style={{ fontSize: '14px', fontWeight: 400, color: 'var(--text-muted)' }}>days</span>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>
+            {currentStreak} <span style={{ fontSize: '14px', fontWeight: 400, color: 'var(--text-muted)' }}>{currentStreak === 1 ? 'day' : 'days'}</span>
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            Consistent active workflow
+          <div style={{ fontSize: '11.5px', color: currentStreak > 0 ? 'var(--warning)' : 'var(--text-muted)' }}>
+            {currentStreak > 0 ? 'Consistent active workflow' : 'Push changes to start streak'}
           </div>
         </Card>
       </div>
