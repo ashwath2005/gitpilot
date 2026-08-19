@@ -12,10 +12,15 @@ import {
   Clock,
   Sparkles,
   Command,
+  Rocket,
+  RotateCw,
+  ExternalLink,
 } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useActivityStore } from '../../store/activityStore';
+import { useUpdateStore } from '../../store/updateStore';
+import { GITHUB_RELEASES_URL } from '../../config/version';
 
 export function CommandPaletteModal({ isOpen, onClose, onOpenAddModal, onOpenScanModal }) {
   const [query, setQuery] = useState('');
@@ -26,6 +31,7 @@ export function CommandPaletteModal({ isOpen, onClose, onOpenAddModal, onOpenSca
   const { repositories, scanAll } = useProjectStore();
   const { settings, updateSettings } = useSettingsStore();
   const { clearLogs } = useActivityStore();
+  const { status: updateStatus, checkForUpdates, openUpdateModal, installUpdate } = useUpdateStore();
 
   useEffect(() => {
     if (isOpen) {
@@ -129,6 +135,41 @@ export function CommandPaletteModal({ isOpen, onClose, onOpenAddModal, onOpenSca
         onClose();
       },
     },
+    {
+      id: 'check-updates',
+      title: 'Check for Updates',
+      subtitle: 'Check GitHub Releases for latest GitPilot version',
+      icon: Rocket,
+      action: () => {
+        onClose();
+        checkForUpdates(true);
+        openUpdateModal();
+      },
+    },
+    {
+      id: 'view-changelog',
+      title: 'View Release Changelog',
+      subtitle: 'Open official GitHub release history in browser',
+      icon: ExternalLink,
+      action: () => {
+        onClose();
+        window.open(GITHUB_RELEASES_URL, '_blank');
+      },
+    },
+    ...(updateStatus === 'DOWNLOADED'
+      ? [
+          {
+            id: 'restart-and-update',
+            title: 'Restart and Update GitPilot',
+            subtitle: 'Apply downloaded update and relaunch application',
+            icon: RotateCw,
+            action: () => {
+              onClose();
+              installUpdate(false);
+            },
+          },
+        ]
+      : []),
   ];
 
   // Map repositories to searchable command items

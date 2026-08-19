@@ -9,33 +9,59 @@ import { ScanWorkspaceModal } from '../components/projects/ScanWorkspaceModal';
 import { DiffViewerModal } from '../components/projects/DiffViewerModal';
 import { CommitPreviewModal } from '../components/projects/CommitPreviewModal';
 import { CommandPaletteModal } from '../components/command-palette/CommandPaletteModal';
+import { OnboardingModal } from '../components/onboarding/OnboardingModal';
+import { AuthModal } from '../components/auth/AuthModal';
+import { SuspendedModal } from '../components/auth/SuspendedModal';
+import { UpdateModal } from '../components/update/UpdateModal';
+import { UpdateBanner } from '../components/update/UpdateBanner';
+import { SplashScreen } from '../components/common/SplashScreen';
 
 import { useProjectStore } from '../store/projectStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useQueueStore } from '../store/queueStore';
+import { useAuthStore } from '../store/authStore';
+import { useUpdateStore } from '../store/updateStore';
 import { schedulerEngine } from '../services/scheduler/schedulerEngine';
 import { desktopBridge } from '../services/desktopBridge';
+import { databaseService } from '../services/database/databaseService';
 
 function AppContent() {
   const navigate = useNavigate();
+  const [showSplash, setShowSplash] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [gitStatus, setGitStatus] = useState({ valid: true, version: 'Checking...' });
 
   // Modal States
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isScanModalOpen, setIsScanModalOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [activeDiffRepo, setActiveDiffRepo] = useState(null);
   const [activeCommitRepo, setActiveCommitRepo] = useState(null);
 
   const { fetchRepositories, scanAll, isScanningAll, repositories } = useProjectStore();
   const { fetchSettings, settings } = useSettingsStore();
-  const { enqueueRepositories } = useQueueStore();
+  const { enqueueRepositories, isProcessing: isQueueProcessing } = useQueueStore();
+  const { initializeAuth, isSuspended } = useAuthStore();
+  const { fetchStatus: fetchUpdateStatus } = useUpdateStore();
+
+  // Keep updater informed of active Git operations to prevent interrupting commits/pushes
+  useEffect(() => {
+    desktopBridge.setGitOperationLock(isScanningAll || isQueueProcessing);
+  }, [isScanningAll, isQueueProcessing]);
 
   useEffect(() => {
-    // Initial data load
+    // Initial data, cloud session, and updater load
+    initializeAuth();
     fetchRepositories();
     fetchSettings();
+    fetchUpdateStatus();
+
+    // Check if onboarding completed
+    if (!databaseService.isOnboardingCompleted()) {
+      setIsOnboardingOpen(true);
+    }
 
     // Check Git environment
     desktopBridge.checkGit().then((res) => {
@@ -49,22 +75,29 @@ function AppContent() {
     // Start background scheduler
     schedulerEngine.startScheduler();
     return () => schedulerEngine.stopScheduler();
-  }, [fetchRepositories, fetchSettings]);
+  }, [initializeAuth, fetchRepositories, fetchSettings]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Don't trigger when inside inputs or textareas (unless ⌘K or ⌘,)
+      const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+
       // ⌘K or Ctrl+K -> Command Palette
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setIsCommandPaletteOpen((prev) => !prev);
+        return;
       }
 
       // ⌘, -> Settings
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
         e.preventDefault();
         navigate('/settings');
+        return;
       }
+
+      if (isInput) return;
 
       // ⌘+Shift+S -> Scan All
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 's') {
@@ -109,10 +142,12 @@ function AppContent() {
 
   return (
     <div className="app-shell">
+      {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
       <Header
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         onOpenAddModal={() => setIsAddModalOpen(true)}
         onOpenScanModal={() => setIsScanModalOpen(true)}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onScanAll={scanAll}
         onPushChanged={handlePushChanged}
         isScanningAll={isScanningAll}
@@ -136,6 +171,28 @@ function AppContent() {
       </div>
 
       <StatusBar gitVersion={gitStatus.version} />
+
+      {/* Account Suspended Wall */}
+      <SuspendedModal isOpen={isSuspended} />
+
+      {/* Auto-Updater Dialog & Floating Notice Banner */}
+      <UpdateModal />
+      <UpdateBanner />
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+      />
+
+      {/* First-Launch Onboarding */}
+      <OnboardingModal
+        isOpen={isOnboardingOpen}
+        onComplete={() => {
+          databaseService.setOnboardingCompleted(true);
+          setIsOnboardingOpen(false);
+        }}
+      />
 
       {/* Global Modals */}
       <AddProjectModal

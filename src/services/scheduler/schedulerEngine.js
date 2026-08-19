@@ -6,6 +6,9 @@ import { desktopBridge } from '../desktopBridge';
 
 /**
  * Scheduler & Queue Processing Engine
+ * State transitions:
+ * WAITING -> SCANNING -> SECURITY_CHECK -> GENERATING_COMMIT -> DRY_RUN -> STAGING -> COMMITTING -> PUSHING -> COMPLETED
+ * Failure: FAILED | BLOCKED | CANCELLED
  */
 class SchedulerEngine {
   constructor() {
@@ -27,11 +30,10 @@ class SchedulerEngine {
   }
 
   /**
-   * Start background timer check for active schedules
+   * Start background timer check for active schedules (every 30s)
    */
   startScheduler() {
     if (this.timer) clearInterval(this.timer);
-    // Check every 30 seconds
     this.timer = setInterval(() => this.checkSchedules(), 30000);
     this.checkSchedules();
   }
@@ -69,23 +71,29 @@ class SchedulerEngine {
 
       if (shouldRun) {
         await databaseService.addLog('INFO', `Schedule triggered: ${sched.name} at ${currentTimeStr}`);
-        const targets = sched.repositoryIds === 'all'
-          ? repos.filter((r) => r.enabled)
-          : repos.filter((r) => r.enabled && sched.repositoryIds.includes(r.id));
+        const targets =
+          sched.repositoryIds === 'all'
+            ? repos.filter((r) => r.enabled)
+            : repos.filter((r) => r.enabled && sched.repositoryIds.includes(r.id));
 
         if (targets.length > 0) {
-          this.enqueueRepositories(targets, { isDryRun: settings.dryRunMode, isAutonomous: settings.autonomousMode });
+          this.enqueueRepositories(targets, {
+            isDryRun: settings.dryRunMode,
+            isAutonomous: settings.autonomousMode,
+          });
         }
       }
     }
   }
 
   /**
-   * Enqueue repositories for processing
+   * Enqueue repositories for sequential processing
    */
   enqueueRepositories(repositories, options = {}) {
     for (const repo of repositories) {
-      const existing = this.queue.find((q) => q.repositoryId === repo.id && (q.status === 'QUEUED' || q.status === 'PROCESSING'));
+      const existing = this.queue.find(
+        (q) => q.repositoryId === repo.id && (q.status === 'WAITING' || q.status === 'SCANNING' || q.status === 'PROCESSING')
+      );
       if (!existing) {
         this.queue.push({
           id: `queue_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
@@ -95,13 +103,15 @@ class SchedulerEngine {
           branch: repo.branch,
           remoteUrl: repo.remoteUrl,
           remoteName: repo.remoteName,
-          status: 'QUEUED', // QUEUED, PROCESSING, SUCCESS, FAILED, NO_CHANGES, SKIPPED, CANCELLED
+          status: 'WAITING', // WAITING, SCANNING, SECURITY_CHECK, GENERATING_COMMIT, DRY_RUN, STAGING, COMMITTING, PUSHING, COMPLETED, FAILED, BLOCKED, CANCELLED
+          progress: 0,
+          message: 'Waiting in queue...',
           logs: [],
           error: null,
-          attempts: 0,
           isDryRun: Boolean(options.isDryRun),
           isAutonomous: Boolean(options.isAutonomous),
-          createdAt: new Date().toISOString(),
+          startedAt: new Date().toISOString(),
+          completedAt: null,
         });
       }
     }
@@ -113,10 +123,23 @@ class SchedulerEngine {
   }
 
   /**
-   * Process queue sequentially with controlled backoff
+   * Cancel specific queue item
+   */
+  cancelQueueItem(id) {
+    const item = this.queue.find((q) => q.id === id);
+    if (item && item.status === 'WAITING') {
+      item.status = 'CANCELLED';
+      item.message = 'Cancelled by user';
+      item.completedAt = new Date().toISOString();
+      this.notify();
+    }
+  }
+
+  /**
+   * Process queue sequentially
    */
   async processNextInQueue() {
-    const nextItem = this.queue.find((q) => q.status === 'QUEUED');
+    const nextItem = this.queue.find((q) => q.status === 'WAITING');
     if (!nextItem) {
       this.isProcessingQueue = false;
       this.notify();
@@ -124,34 +147,38 @@ class SchedulerEngine {
     }
 
     this.isProcessingQueue = true;
-    nextItem.status = 'PROCESSING';
     this.notify();
 
     const log = (msg) => {
       const time = new Date().toLocaleTimeString();
       nextItem.logs.push(`[${time}] ${msg}`);
+      nextItem.message = msg;
       databaseService.addLog('INFO', `[${nextItem.repositoryName}] ${msg}`);
     };
 
     try {
-      log(`Starting scan on repository "${nextItem.repositoryName}"...`);
+      // 1. SCANNING
+      nextItem.status = 'SCANNING';
+      nextItem.progress = 15;
+      log(`Scanning repository "${nextItem.repositoryName}"...`);
+      this.notify();
       await databaseService.updateRepository(nextItem.repositoryId, { status: 'ANALYZING' });
 
-      // Step 1: Validate repository
       const validation = await gitService.validateRepository(nextItem.path);
       if (!validation.valid) {
         throw new Error(validation.error || 'Repository validation failed');
       }
 
-      // Step 2: Check working tree status
       const statusRes = await gitService.getStatus(nextItem.path);
       if (!statusRes.success) {
         throw new Error(statusRes.error || 'Failed to read git status');
       }
 
       if (!statusRes.hasChanges) {
-        log('No changes detected. Nothing to commit.');
-        nextItem.status = 'NO_CHANGES';
+        log('No changes detected. Working tree clean.');
+        nextItem.status = 'COMPLETED';
+        nextItem.progress = 100;
+        nextItem.completedAt = new Date().toISOString();
         await databaseService.updateRepository(nextItem.repositoryId, {
           status: 'NO_CHANGES',
           lastScanAt: new Date().toISOString(),
@@ -163,7 +190,8 @@ class SchedulerEngine {
           status: 'NO_CHANGES',
           filesChanged: 0,
         });
-        this.processNextInQueue();
+        this.notify();
+        setTimeout(() => this.processNextInQueue(), 600);
         return;
       }
 
@@ -173,23 +201,49 @@ class SchedulerEngine {
         status: 'CHANGES',
       });
 
-      // Step 3: Security & Secret Scan
-      log('Running security scan for sensitive files and secret patterns...');
+      // 2. SECURITY_CHECK
+      nextItem.status = 'SECURITY_CHECK';
+      nextItem.progress = 35;
+      log('Running security scan for credentials and sensitive files...');
+      this.notify();
+
       const fileSecurity = secretScanner.checkFiles(statusRes.files);
       if (fileSecurity.hasSecrets) {
         const reason = fileSecurity.findings.map((f) => f.reason).join('; ');
-        throw new Error(`Security Warning: Potential secret or sensitive file detected: ${reason}`);
+        nextItem.status = 'BLOCKED';
+        nextItem.error = `Security Guard: Blocked sensitive files: ${reason}`;
+        await databaseService.recordPushHistory({
+          repositoryId: nextItem.repositoryId,
+          repositoryName: nextItem.repositoryName,
+          status: 'BLOCKED',
+          error: nextItem.error,
+        });
+        desktopBridge.sendNotification('GitPilot Push Blocked', `Sensitive file detected in ${nextItem.repositoryName}`);
+        throw new Error(nextItem.error);
       }
 
       const diffRes = await gitService.getDiff(nextItem.path);
       const diffSecurity = secretScanner.scanDiffContent(diffRes.combinedDiff);
       if (diffSecurity.hasSecrets) {
         const rules = diffSecurity.matches.map((m) => m.rule).join(', ');
-        throw new Error(`Security Warning: Potential credential patterns detected in diff: ${rules}`);
+        nextItem.status = 'BLOCKED';
+        nextItem.error = `Security Guard: Potential credential patterns detected in diff: ${rules}`;
+        await databaseService.recordPushHistory({
+          repositoryId: nextItem.repositoryId,
+          repositoryName: nextItem.repositoryName,
+          status: 'BLOCKED',
+          error: nextItem.error,
+        });
+        desktopBridge.sendNotification('GitPilot Push Blocked', `Secret signature detected in ${nextItem.repositoryName}`);
+        throw new Error(nextItem.error);
       }
 
-      // Step 4: Generate Commit Message
-      log('Generating commit message...');
+      // 3. GENERATING_COMMIT
+      nextItem.status = 'GENERATING_COMMIT';
+      nextItem.progress = 55;
+      log('Generating conventional commit message...');
+      this.notify();
+
       const settings = await databaseService.getSettings();
       const commitMessage = await aiService.generateCommitMessage({
         apiKey: settings.enableAI ? settings.openaiApiKey : '',
@@ -199,46 +253,74 @@ class SchedulerEngine {
         diffStat: diffRes.stat,
       });
 
-      log(`Generated commit: "${commitMessage}"`);
+      log(`Commit message: "${commitMessage}"`);
 
-      // Dry Run Check
+      // 4. DRY_RUN
       if (nextItem.isDryRun) {
-        log('Dry Run Mode: Skipped staging, committing, and pushing.');
-        nextItem.status = 'SUCCESS';
+        nextItem.status = 'DRY_RUN';
+        nextItem.progress = 100;
+        log('Dry Run Mode: Staging, commit, and push skipped.');
+        nextItem.completedAt = new Date().toISOString();
         await databaseService.updateRepository(nextItem.repositoryId, {
           status: 'READY',
           lastScanAt: new Date().toISOString(),
         });
-        this.processNextInQueue();
+        this.notify();
+        setTimeout(() => this.processNextInQueue(), 600);
         return;
       }
 
-      // Step 5: Stage All Changes
+      // 5. STAGING
+      nextItem.status = 'STAGING';
+      nextItem.progress = 70;
+      log('Staging changes (git add -A)...');
+      this.notify();
       await databaseService.updateRepository(nextItem.repositoryId, { status: 'COMMITTING' });
-      log('Staging changes with git add -A...');
+
       const stageRes = await gitService.stageAll(nextItem.path);
       if (!stageRes.success) {
         throw new Error(stageRes.error || 'Failed to stage files');
       }
 
-      // Step 6: Commit
+      // 6. COMMITTING
+      nextItem.status = 'COMMITTING';
+      nextItem.progress = 85;
       log('Creating commit...');
+      this.notify();
+
       const commitRes = await gitService.commit(nextItem.path, commitMessage);
       if (!commitRes.success) {
         throw new Error(commitRes.error || 'Commit creation failed');
       }
 
-      // Step 7: Push
-      await databaseService.updateRepository(nextItem.repositoryId, { status: 'PUSHING' });
-      log(`Pushing to ${nextItem.remoteName || 'origin'} on branch ${nextItem.branch || 'main'}...`);
-      const pushRes = await gitService.push(nextItem.path, nextItem.remoteName || 'origin', nextItem.branch || 'main');
+      // 7. PUSHING
+      const hasRemote =
+        nextItem.remoteUrl && nextItem.remoteUrl !== 'local' && nextItem.remoteUrl !== 'No remote configured';
+      if (hasRemote) {
+        nextItem.status = 'PUSHING';
+        nextItem.progress = 95;
+        log(`Pushing to ${nextItem.remoteName || 'origin'} (${nextItem.branch || 'main'})...`);
+        this.notify();
+        await databaseService.updateRepository(nextItem.repositoryId, { status: 'PUSHING' });
 
-      if (!pushRes.success) {
-        throw new Error(pushRes.error || 'Git push failed');
+        const pushRes = await gitService.push(
+          nextItem.path,
+          nextItem.remoteName || 'origin',
+          nextItem.branch || 'main'
+        );
+
+        if (!pushRes.success) {
+          throw new Error(pushRes.error || 'Git push failed');
+        }
+        log('Push completed successfully.');
+      } else {
+        log('Local commit completed (no remote configured).');
       }
 
-      log('Push successful!');
-      nextItem.status = 'SUCCESS';
+      // 8. COMPLETED
+      nextItem.status = 'COMPLETED';
+      nextItem.progress = 100;
+      nextItem.completedAt = new Date().toISOString();
       await databaseService.updateRepository(nextItem.repositoryId, {
         status: 'SUCCESS',
         lastPushAt: new Date().toISOString(),
@@ -256,14 +338,17 @@ class SchedulerEngine {
 
       if (settings.notificationPushSuccess) {
         desktopBridge.sendNotification(
-          'GitPilot Push Successful',
+          'GitPilot Push Completed',
           `${nextItem.repositoryName}: ${commitMessage}`
         );
       }
     } catch (err) {
       log(`Error: ${err.message}`);
       nextItem.error = err.message;
-      nextItem.status = 'FAILED';
+      if (nextItem.status !== 'BLOCKED') {
+        nextItem.status = 'FAILED';
+      }
+      nextItem.completedAt = new Date().toISOString();
 
       await databaseService.updateRepository(nextItem.repositoryId, {
         status: 'FAILED',
@@ -278,7 +363,7 @@ class SchedulerEngine {
       });
 
       const settings = await databaseService.getSettings();
-      if (settings.notificationPushFailure) {
+      if (settings.notificationPushFailure && nextItem.status !== 'BLOCKED') {
         desktopBridge.sendNotification(
           'GitPilot Push Failed',
           `${nextItem.repositoryName}: ${err.message}`
@@ -287,7 +372,6 @@ class SchedulerEngine {
     }
 
     this.notify();
-    // Proceed to next repository in queue
     setTimeout(() => this.processNextInQueue(), 1000);
   }
 }

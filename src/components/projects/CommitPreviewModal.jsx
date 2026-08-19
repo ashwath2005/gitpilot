@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sparkles, GitCommit, ArrowUpRight, AlertTriangle, Loader2 } from 'lucide-react';
+import { Sparkles, GitCommit, AlertTriangle, Loader2 } from 'lucide-react';
 import { gitService } from '../../services/git/gitService';
 import { aiService } from '../../services/ai/aiService';
 import { secretScanner } from '../../services/security/secretScanner';
 import { databaseService } from '../../services/database/databaseService';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useProjectStore } from '../../store/projectStore';
+import { Modal, Button, TextButton, Input, Badge } from '../ui';
 
 export function CommitPreviewModal({ isOpen, onClose, repository, onSuccess }) {
   const [loading, setLoading] = useState(true);
@@ -42,7 +43,7 @@ export function CommitPreviewModal({ isOpen, onClose, repository, onSuccess }) {
         // Check file security
         const secCheck = secretScanner.checkFiles(statusRes.files);
         if (secCheck.hasSecrets) {
-          setSecurityAlert(`Security alert: Detected sensitive files: ${secCheck.findings.map((f) => f.file).join(', ')}`);
+          setSecurityAlert('Security alert: Detected sensitive files: ' + secCheck.findings.map((f) => f.file).join(', '));
         }
 
         const diffRes = await gitService.getDiff(repository.path);
@@ -101,9 +102,12 @@ export function CommitPreviewModal({ isOpen, onClose, repository, onSuccess }) {
       const commitRes = await gitService.commit(repository.path, commitMessage.trim());
       if (!commitRes.success) throw new Error(commitRes.error || 'Failed to create commit');
 
-      // Step 3: Push
-      const pushRes = await gitService.push(repository.path, repository.remoteName || 'origin', repository.branch || 'main');
-      if (!pushRes.success) throw new Error(pushRes.error || 'Failed to push commit to remote');
+      // Step 3: Push (if remote is configured)
+      const hasRemote = repository.remoteUrl && repository.remoteUrl !== 'local' && repository.remoteUrl !== 'No remote configured';
+      if (hasRemote) {
+        const pushRes = await gitService.push(repository.path, repository.remoteName || 'origin', repository.branch || 'main');
+        if (!pushRes.success) throw new Error(pushRes.error || 'Failed to push commit to remote');
+      }
 
       await databaseService.updateRepository(repository.id, {
         status: 'SUCCESS',
@@ -132,113 +136,135 @@ export function CommitPreviewModal({ isOpen, onClose, repository, onSuccess }) {
   if (!isOpen || !repository) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '580px' }}>
-        {/* Header */}
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <h3 style={{ fontSize: '15px' }}>Commit & Push</h3>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              {repository.name} · branch: <span className="font-mono" style={{ color: 'var(--primary-bright)' }}>{repository.branch}</span>
-            </p>
-          </div>
-          <button onClick={onClose} className="btn-ghost" style={{ padding: '4px', border: 'none', cursor: 'pointer' }}>
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {loading ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '30px 0', gap: '8px', color: 'var(--text-muted)' }}>
-              <Loader2 size={16} className="animate-spin" />
-              <span>Analyzing repository diff...</span>
-            </div>
-          ) : (
-            <>
-              {/* Diff Summary Stat */}
-              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
-                  <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{files.length} files changed</span>
-                  <div className="font-mono" style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    {files.slice(0, 3).map((f) => f.path).join(', ')}{files.length > 3 ? ` + ${files.length - 3} more` : ''}
-                  </div>
-                </div>
-                {diffStat && (
-                  <div className="font-mono" style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                    {diffStat.split('\n').pop()}
-                  </div>
-                )}
-              </div>
-
-              {/* Security Warning */}
-              {securityAlert && (
-                <div style={{ background: 'var(--danger-subtle)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 'var(--radius-sm)', padding: '10px 12px', display: 'flex', alignItems: 'flex-start', gap: '8px', color: 'var(--danger)', fontSize: '12px' }}>
-                  <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
-                  <div>
-                    <strong style={{ display: 'block', marginBottom: '2px' }}>Security Guard Alert</strong>
-                    {securityAlert}
-                  </div>
-                </div>
-              )}
-
-              {/* Commit Message Box */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 500 }}>Commit Message</label>
-                  <button
-                    onClick={handleRegenerate}
-                    disabled={isGeneratingAI}
-                    className="btn-ghost"
-                    style={{ fontSize: '11.5px', color: 'var(--primary-bright)', display: 'flex', alignItems: 'center', gap: '4px', border: 'none', background: 'transparent', cursor: 'pointer' }}
-                  >
-                    <Sparkles size={12} className={isGeneratingAI ? 'animate-spin' : ''} />
-                    <span>{isGeneratingAI ? 'Regenerating...' : 'Regenerate'}</span>
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  className="input-text font-mono"
-                  value={commitMessage}
-                  onChange={(e) => setCommitMessage(e.target.value)}
-                  placeholder="e.g. feat: implement graph traversal controls"
-                />
-              </div>
-
-              {error && (
-                <div style={{ background: 'var(--danger-subtle)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 'var(--radius-sm)', padding: '10px 12px', color: 'var(--danger)', fontSize: '12px' }}>
-                  {error}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-default)', display: 'flex', justifyContent: 'flex-end', gap: '8px', background: 'var(--bg-surface)' }}>
-          <button onClick={onClose} className="btn btn-secondary">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Commit & Push Changes"
+      subtitle={`${repository.name} · branch: ${repository.branch || 'main'}`}
+      icon={GitCommit}
+      maxWidth="600px"
+      footer={
+        <>
+          <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            onClick={handleCommitAndPush}
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            loading={isCommitting}
             disabled={loading || isCommitting || !commitMessage.trim() || Boolean(securityAlert)}
-            className="btn btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            onClick={handleCommitAndPush}
+            icon={GitCommit}
           >
-            {isCommitting ? (
-              <>
-                <Loader2 size={13} className="animate-spin" />
-                <span>Committing & Pushing...</span>
-              </>
-            ) : (
-              <>
-                <GitCommit size={14} />
-                <span>Commit & Push</span>
-              </>
+            {isCommitting ? 'Committing & Pushing...' : 'Commit & Push'}
+          </Button>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {loading ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 0', gap: '8px', color: 'var(--text-muted)' }}>
+            <Loader2 size={16} className="animate-spin" style={{ color: 'var(--primary-bright)' }} />
+            <span>Analyzing repository diff...</span>
+          </div>
+        ) : (
+          <>
+            {/* Diff Summary Stat */}
+            <div
+              style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-default)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '12px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {files.length} files changed
+                </span>
+                <div className="font-mono" style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '3px' }}>
+                  {files.slice(0, 3).map((f) => f.path).join(', ')}
+                  {files.length > 3 ?  +  more : ''}
+                </div>
+              </div>
+
+              {diffStat && (
+                <span className="font-mono" style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  {diffStat.split('\n').pop()}
+                </span>
+              )}
+            </div>
+
+            {/* Security Warning */}
+            {securityAlert && (
+              <div
+                style={{
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '12px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '10px',
+                  color: 'var(--danger)',
+                  fontSize: '12px',
+                }}
+              >
+                <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <strong style={{ display: 'block', marginBottom: '2px' }}>Security Guard Alert</strong>
+                  {securityAlert}
+                </div>
+              </div>
             )}
-          </button>
-        </div>
+
+            {/* Commit Message Box */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                  Commit Message
+                </label>
+                <TextButton
+                  type="button"
+                  onClick={handleRegenerate}
+                  disabled={isGeneratingAI}
+                  icon={Sparkles}
+                  style={{ fontSize: '11.5px' }}
+                >
+                  {isGeneratingAI ? 'Regenerating...' : 'Regenerate AI'}
+                </TextButton>
+              </div>
+
+              <Input
+                type="text"
+                className="font-mono"
+                value={commitMessage}
+                onChange={(e) => setCommitMessage(e.target.value)}
+                placeholder="e.g. feat: implement graph traversal controls"
+                autoFocus
+              />
+            </div>
+
+            {error && (
+              <div
+                style={{
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '10px 12px',
+                  color: 'var(--danger)',
+                  fontSize: '12px',
+                }}
+              >
+                {error}
+              </div>
+            )}
+          </>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }

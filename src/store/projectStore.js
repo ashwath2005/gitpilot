@@ -26,9 +26,12 @@ export const useProjectStore = create((set, get) => ({
     set({ selectedRepoId: id });
   },
 
-  addRepository: async (path, name) => {
+  addRepository: async (pathOrObject, name) => {
     set({ isLoading: true, error: null });
     try {
+      const path = typeof pathOrObject === 'object' ? pathOrObject.path : pathOrObject;
+      const repoName = typeof pathOrObject === 'object' ? pathOrObject.name : name;
+
       const validation = await gitService.validateRepository(path);
       if (!validation.valid) {
         throw new Error(validation.error || 'Invalid git repository');
@@ -37,13 +40,14 @@ export const useProjectStore = create((set, get) => ({
       const statusRes = await gitService.getStatus(path);
 
       const newRepo = await databaseService.addRepository({
-        name: name || path.split(/[\\/]/).filter(Boolean).pop(),
+        name: repoName || path.split(/[\\/]/).filter(Boolean).pop() || 'Repo',
         path,
-        branch: validation.branch,
-        remoteUrl: validation.remoteUrl,
-        remoteName: validation.remoteName,
+        branch: validation.branch || 'main',
+        remoteUrl: validation.remoteUrl || 'local',
+        remoteName: validation.remoteName || 'local',
         status: statusRes.hasChanges ? 'CHANGES' : 'READY',
-        filesChanged: statusRes.summary.total,
+        filesChanged: statusRes.summary?.total || 0,
+        enabled: typeof pathOrObject === 'object' && pathOrObject.enabled !== undefined ? pathOrObject.enabled : true,
       });
 
       const repos = await databaseService.getRepositories();

@@ -1,11 +1,13 @@
 import React from 'react';
 import { Search, Play, RefreshCw, Plus, FolderSearch, ShieldCheck, ShieldAlert, Cpu } from 'lucide-react';
 import { useSettingsStore } from '../../store/settingsStore';
+import { UserMenu } from '../auth/UserMenu';
 
 export function Header({
   onOpenCommandPalette,
   onOpenAddModal,
   onOpenScanModal,
+  onOpenAuthModal,
   onScanAll,
   onPushChanged,
   isScanningAll,
@@ -97,6 +99,11 @@ export function Header({
           <Plus size={13} />
           <span>Add Repo</span>
         </button>
+
+        <div style={{ width: '1px', height: '16px', background: 'var(--border-default)', margin: '0 4px' }} />
+
+        {/* User Account Menu */}
+        <UserMenu onOpenAuthModal={onOpenAuthModal} />
       </div>
     </header>
   );

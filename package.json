@@ -1,20 +1,63 @@
 {
   "name": "gitpilot",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "description": "GitPilot — Your Autonomous Git Workspace",
+  "author": "GitPilot Team",
   "type": "module",
+  "main": "electron-main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "start": "electron .",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "dist": "vite build && electron-builder --win nsis",
+    "release": "vite build && electron-builder --win --publish always",
+    "installer": "electron-builder --win nsis",
+    "package": "npx @electron/packager . GitPilot --platform=win32 --arch=x64 --icon=src-tauri/icons/icon.ico --out=dist-app --overwrite",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "build": {
+    "appId": "com.gitpilot.desktop",
+    "productName": "GitPilot",
+    "publish": {
+      "provider": "github",
+      "owner": "ashwath2005",
+      "repo": "GitPilot"
+    },
+    "directories": {
+      "output": "dist-release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "electron-main.cjs",
+      "package.json",
+      "public/**/*",
+      "src-tauri/icons/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "src-tauri/icons/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "GitPilot"
+    }
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "@tauri-apps/plugin-fs": "^2.0.0",
     "@tauri-apps/plugin-notification": "^2.0.0",
     "@tauri-apps/plugin-shell": "^2.0.0",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^0.475.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -27,6 +70,9 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
+    "png-to-ico": "^3.0.2",
     "vite": "^6.1.0"
   }
 }

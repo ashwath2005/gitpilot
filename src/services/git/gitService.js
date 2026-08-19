@@ -2,7 +2,7 @@ import { desktopBridge } from '../desktopBridge';
 
 /**
  * Git Service
- * Native Git CLI abstraction layer. Never assumes main/master/origin.
+ * Native Git CLI abstraction layer. Never assumes main/master/origin or force flags.
  */
 export const gitService = {
   /**
@@ -12,136 +12,40 @@ export const gitService = {
     if (!path || typeof path !== 'string') {
       return { valid: false, error: 'Repository path is required' };
     }
-
-    const check = await desktopBridge.runGit(path, 'git rev-parse --is-inside-work-tree');
-    if (!check.success || !check.stdout.includes('true')) {
-      return { valid: false, error: 'Not a valid Git repository' };
-    }
-
-    const branchRes = await this.getCurrentBranch(path);
-    const remoteRes = await this.getRemoteUrl(path);
-
-    return {
-      valid: true,
-      branch: branchRes.branch || 'HEAD',
-      remoteUrl: remoteRes.remoteUrl || 'local',
-      remoteName: remoteRes.remoteName || 'origin',
-    };
+    return await desktopBridge.validateRepository(path);
   },
 
   /**
    * Get current checked-out branch dynamically
    */
   async getCurrentBranch(path) {
-    const res = await desktopBridge.runGit(path, 'git branch --show-current');
-    if (res.success && res.stdout.trim()) {
-      return { branch: res.stdout.trim() };
-    }
-
-    // Fallback if in detached head
-    const headRes = await desktopBridge.runGit(path, 'git rev-parse --abbrev-ref HEAD');
-    if (headRes.success && headRes.stdout.trim()) {
-      return { branch: headRes.stdout.trim() };
-    }
-
-    return { branch: 'main' };
+    const check = await desktopBridge.validateRepository(path);
+    return { branch: check.branch || 'main' };
   },
 
   /**
    * Get remote url dynamically (origin or first available)
    */
   async getRemoteUrl(path) {
-    const originRes = await desktopBridge.runGit(path, 'git remote get-url origin');
-    if (originRes.success && originRes.stdout.trim()) {
-      return { remoteName: 'origin', remoteUrl: originRes.stdout.trim() };
-    }
-
-    // Get list of remotes
-    const listRes = await desktopBridge.runGit(path, 'git remote');
-    if (listRes.success && listRes.stdout.trim()) {
-      const firstRemote = listRes.stdout.trim().split('\n')[0].trim();
-      const urlRes = await desktopBridge.runGit(path, `git remote get-url ${firstRemote}`);
-      if (urlRes.success && urlRes.stdout.trim()) {
-        return { remoteName: firstRemote, remoteUrl: urlRes.stdout.trim() };
-      }
-    }
-
-    return { remoteName: null, remoteUrl: 'No remote configured' };
+    const check = await desktopBridge.validateRepository(path);
+    return {
+      remoteName: check.remoteName || 'origin',
+      remoteUrl: check.remoteUrl || 'local',
+    };
   },
 
   /**
    * Get parsed git status
    */
   async getStatus(path) {
-    const res = await desktopBridge.runGit(path, 'git status --porcelain');
-    if (!res.success) {
-      return {
-        success: false,
-        error: res.error || 'Failed to read git status',
-        files: [],
-        summary: { modified: 0, added: 0, deleted: 0, untracked: 0, renamed: 0, total: 0 },
-      };
-    }
-
-    const lines = res.stdout.split('\n').filter(Boolean);
-    const files = [];
-    const summary = { modified: 0, added: 0, deleted: 0, untracked: 0, renamed: 0, total: 0 };
-
-    for (const line of lines) {
-      const code = line.substring(0, 2);
-      const filePath = line.substring(3).trim();
-
-      let status = 'modified';
-      if (code.includes('?')) {
-        status = 'untracked';
-        summary.untracked++;
-      } else if (code.includes('A')) {
-        status = 'added';
-        summary.added++;
-      } else if (code.includes('D')) {
-        status = 'deleted';
-        summary.deleted++;
-      } else if (code.includes('R')) {
-        status = 'renamed';
-        summary.renamed++;
-      } else {
-        status = 'modified';
-        summary.modified++;
-      }
-
-      summary.total++;
-      files.push({
-        status,
-        code,
-        path: filePath,
-        staged: code[0] !== ' ' && code[0] !== '?',
-      });
-    }
-
-    return {
-      success: true,
-      files,
-      summary,
-      hasChanges: files.length > 0,
-    };
+    return await desktopBridge.getStatus(path);
   },
 
   /**
    * Get diff for unstaged and staged files
    */
   async getDiff(path, targetFile = null) {
-    const fileArg = targetFile ? ` -- "${targetFile}"` : '';
-    const unstaged = await desktopBridge.runGit(path, `git diff${fileArg}`);
-    const staged = await desktopBridge.runGit(path, `git diff --cached${fileArg}`);
-    const statRes = await desktopBridge.runGit(path, `git diff --stat${fileArg}`);
-
-    return {
-      success: true,
-      unstagedDiff: unstaged.stdout || '',
-      stagedDiff: staged.stdout || '',
-      combinedDiff: (staged.stdout || '') + '\n' + (unstaged.stdout || ''),
-      stat: statRes.stdout || '',
-    };
+    return await desktopBridge.getDiff(path, targetFile);
   },
 
   /**
@@ -174,10 +78,15 @@ export const gitService = {
   },
 
   /**
-   * Safe staging of changes (respecting secrets and gitignore)
+   * Safe staging of changes (with retry on transient locks)
    */
   async stageAll(path) {
-    return await desktopBridge.runGit(path, 'git add -A');
+    let res = await desktopBridge.stageAll(path);
+    if (!res.success && (res.error?.includes('index.lock') || res.stderr?.includes('index.lock'))) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      res = await desktopBridge.stageAll(path);
+    }
+    return res;
   },
 
   /**
@@ -187,9 +96,12 @@ export const gitService = {
     if (!message || !message.trim()) {
       return { success: false, error: 'Commit message cannot be empty' };
     }
-    // Safe escaping for command line
-    const sanitizedMsg = message.replace(/"/g, '\\"');
-    return await desktopBridge.runGit(path, `git commit -m "${sanitizedMsg}"`);
+    let res = await desktopBridge.commit(path, message.trim());
+    if (!res.success && (res.error?.includes('index.lock') || res.stderr?.includes('index.lock'))) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      res = await desktopBridge.commit(path, message.trim());
+    }
+    return res;
   },
 
   /**
@@ -199,17 +111,12 @@ export const gitService = {
     const targetBranch = branch || 'main';
     const targetRemote = remote || 'origin';
 
-    // First check if remote exists
-    const checkRemote = await desktopBridge.runGit(path, `git remote get-url ${targetRemote}`);
-    if (!checkRemote.success) {
-      return {
-        success: false,
-        error: `Remote "${targetRemote}" not configured or unreachable`,
-        category: 'RemoteNotFound',
-      };
+    // Check if remote is local / none
+    if (!targetRemote || targetRemote === 'local' || targetRemote === 'No remote configured') {
+      return { success: true, output: 'Local commit only (no remote)' };
     }
 
-    const pushRes = await desktopBridge.runGit(path, `git push ${targetRemote} ${targetBranch}`);
+    const pushRes = await desktopBridge.push(path, targetRemote, targetBranch);
     if (!pushRes.success) {
       const err = (pushRes.stderr || pushRes.error || '').toLowerCase();
       let category = 'UnknownGitError';
@@ -222,6 +129,8 @@ export const gitService = {
         category = 'MergeConflict';
       } else if (err.includes('could not resolve host') || err.includes('network')) {
         category = 'NetworkError';
+      } else if (err.includes('remote') && err.includes('not found')) {
+        category = 'RemoteNotFound';
       }
 
       return {

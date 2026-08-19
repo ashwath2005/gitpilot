@@ -1,6 +1,6 @@
 /**
  * Local Database & Persistence Service
- * Manages SQLite / IndexedDB local-first storage for repositories, history, schedules, and settings.
+ * Manages local storage for repositories, history, schedules, onboarding, and settings.
  */
 
 const STORAGE_KEYS = {
@@ -11,6 +11,7 @@ const STORAGE_KEYS = {
   SETTINGS: 'gitpilot_settings',
   QUEUE: 'gitpilot_queue',
   LOGS: 'gitpilot_system_logs',
+  ONBOARDING_COMPLETED: 'gitpilot_onboarding_completed',
 };
 
 const DEFAULT_SETTINGS = {
@@ -21,6 +22,7 @@ const DEFAULT_SETTINGS = {
   aiModel: 'gpt-4o-mini',
   launchOnStartup: false,
   startMinimized: false,
+  minimizeToTray: true,
   defaultScheduleTime: '19:00',
   defaultFrequency: 'daily',
   retryCount: 3,
@@ -101,6 +103,15 @@ const DEFAULT_USER_REPOSITORIES = [
 ];
 
 export const databaseService = {
+  // --- Onboarding ---
+  isOnboardingCompleted() {
+    return localStorage.getItem(STORAGE_KEYS.ONBOARDING_COMPLETED) === 'true';
+  },
+
+  setOnboardingCompleted(completed = true) {
+    localStorage.setItem(STORAGE_KEYS.ONBOARDING_COMPLETED, String(completed));
+  },
+
   // --- Repositories ---
   async getRepositories() {
     const raw = localStorage.getItem(STORAGE_KEYS.REPOSITORIES);
@@ -109,7 +120,7 @@ export const databaseService = {
 
     let repos = raw ? JSON.parse(raw) : [];
 
-    // Automatically ensure all user workspaces are included unless user explicitly deleted them
+    // Automatically ensure discovered user workspaces are included unless explicitly deleted
     let updated = false;
     for (const defaultRepo of DEFAULT_USER_REPOSITORIES) {
       if (removedSet.has(defaultRepo.id) || removedSet.has(defaultRepo.path.toLowerCase())) {
@@ -195,7 +206,6 @@ export const databaseService = {
     const target = repos.find((r) => r.id === id);
     const filtered = repos.filter((r) => r.id !== id);
 
-    // Track removal so it won't auto-repopulate
     if (target) {
       const removedRaw = localStorage.getItem(STORAGE_KEYS.REMOVED_REPOS);
       const list = removedRaw ? JSON.parse(removedRaw) : [];

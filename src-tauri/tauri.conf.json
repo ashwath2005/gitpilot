@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/tooling/cli/schema.json",
   "productName": "GitPilot",
-  "version": "1.0.0",
-  "identifier": "com.gitpilot.app",
+  "version": "1.1.0",
+  "identifier": "com.gitpilot.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -13,9 +13,10 @@
     "windows": [
       {
         "title": "GitPilot — Your Autonomous Git Workspace",
+        "label": "main",
         "width": 1280,
         "height": 820,
-        "minWidth": 960,
+        "minWidth": 1024,
         "minHeight": 640,
         "resizable": true,
         "fullscreen": false,
@@ -25,7 +26,12 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "capabilities": ["default"]
+    },
+    "trayIcon": {
+      "iconPath": "icons/32x32.png",
+      "tooltip": "GitPilot — Autonomous Git Workspace"
     }
   },
   "bundle": {
@@ -34,7 +40,20 @@
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
-      "icons/icon.ico"
-    ]
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "",
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "headerImage": null,
+        "sidebarImage": null,
+        "installMode": "currentUser",
+        "languages": ["en-US"]
+      }
+    }
   }
 }

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Search, Plus, FolderSearch, RefreshCw, Filter } from 'lucide-react';
+﻿import React, { useState } from 'react';
+import { Search, Plus, FolderSearch, RefreshCw, FolderGit2 } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { ProjectCard } from '../../components/projects/ProjectCard';
+import { Button, EmptyState } from '../../components/ui';
 
 export function ProjectsPage({ onOpenAddModal, onOpenScanModal, onCommitPreview, onOpenDiff }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -29,37 +30,58 @@ export function ProjectsPage({ onOpenAddModal, onOpenScanModal, onCommitPreview,
       {/* Top Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ fontSize: '20px', fontWeight: 700 }}>Repositories</h1>
+          <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>Repositories</h1>
           <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
             Manage registered Git projects and check live branch statuses
           </p>
         </div>
 
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={scanAll} disabled={isScanningAll} className="btn btn-secondary">
-            <RefreshCw size={13} className={isScanningAll ? 'animate-spin' : ''} />
-            <span>Scan All</span>
-          </button>
-          <button onClick={onOpenScanModal} className="btn btn-secondary">
-            <FolderSearch size={13} />
-            <span>Scan Folder</span>
-          </button>
-          <button onClick={onOpenAddModal} className="btn btn-primary">
-            <Plus size={13} />
-            <span>Add Repository</span>
-          </button>
+          <Button
+            variant="secondary"
+            onClick={scanAll}
+            disabled={isScanningAll}
+            loading={isScanningAll}
+            icon={RefreshCw}
+          >
+            Scan All
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={onOpenScanModal}
+            icon={FolderSearch}
+          >
+            Scan Folder
+          </Button>
+          <Button
+            variant="primary"
+            onClick={onOpenAddModal}
+            icon={Plus}
+          >
+            Add Repository
+          </Button>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', padding: '8px 12px' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border-default)',
+          borderRadius: 'var(--radius-md)',
+          padding: '8px 14px',
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
           <Search size={14} style={{ color: 'var(--text-muted)' }} />
           <input
             type="text"
             placeholder="Filter by repository name, path, or branch..."
             className="input-text"
-            style={{ border: 'none', background: 'transparent', padding: '4px 0' }}
+            style={{ border: 'none', background: 'transparent', padding: '4px 0', boxShadow: 'none' }}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -70,11 +92,12 @@ export function ProjectsPage({ onOpenAddModal, onOpenScanModal, onCommitPreview,
           {['ALL', 'CHANGES', 'READY', 'DISABLED'].map((status) => (
             <button
               key={status}
+              type="button"
               onClick={() => setStatusFilter(status)}
               className="btn-ghost"
               style={{
                 fontSize: '11px',
-                padding: '3px 7px',
+                padding: '3px 8px',
                 borderRadius: 'var(--radius-xs)',
                 cursor: 'pointer',
                 backgroundColor: statusFilter === status ? 'var(--bg-elevated)' : 'transparent',
@@ -90,9 +113,14 @@ export function ProjectsPage({ onOpenAddModal, onOpenScanModal, onCommitPreview,
 
       {/* Repositories Grid */}
       {filteredRepos.length === 0 ? (
-        <div style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', padding: '48px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
-          No repositories matching your criteria.
-        </div>
+        <EmptyState
+          icon={FolderGit2}
+          title="No Matching Repositories"
+          description={repositories.length === 0 ? "You haven't registered any Git repositories yet." : "No repositories match your filter criteria."}
+          actionLabel={repositories.length === 0 ? "Add Repository" : undefined}
+          onAction={repositories.length === 0 ? onOpenAddModal : undefined}
+          actionIcon={Plus}
+        />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
           {filteredRepos.map((repo) => (

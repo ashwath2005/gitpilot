@@ -13,6 +13,7 @@ import {
   Check,
 } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
+import { Button, Badge } from '../ui';
 
 export function ProjectCard({ repository, onCommitPreview, onOpenDiff }) {
   const navigate = useNavigate();
@@ -36,21 +37,21 @@ export function ProjectCard({ repository, onCommitPreview, onOpenDiff }) {
   const getStatusBadge = () => {
     switch (repository.status) {
       case 'CHANGES':
-        return <span className="badge badge-changes">● {repository.filesChanged || 'Active'} Changes</span>;
+        return <Badge variant="changes">● {repository.filesChanged || 'Active'} Changes</Badge>;
       case 'ANALYZING':
-        return <span className="badge badge-analyzing">Analyzing...</span>;
+        return <Badge variant="info">Analyzing...</Badge>;
       case 'COMMITTING':
-        return <span className="badge badge-committing">Committing...</span>;
+        return <Badge variant="warning">Committing...</Badge>;
       case 'PUSHING':
-        return <span className="badge badge-pushing">Pushing...</span>;
+        return <Badge variant="warning">Pushing...</Badge>;
       case 'SUCCESS':
-        return <span className="badge badge-success">✓ Pushed</span>;
+        return <Badge variant="success">✓ Pushed</Badge>;
       case 'FAILED':
-        return <span className="badge badge-failed">✗ Failed</span>;
+        return <Badge variant="danger">✗ Failed</Badge>;
       case 'NO_CHANGES':
-        return <span className="badge badge-no-changes">— Clean</span>;
+        return <Badge variant="default">— Clean</Badge>;
       default:
-        return <span className="badge badge-ready">Ready</span>;
+        return <Badge variant="default">Ready</Badge>;
     }
   };
 

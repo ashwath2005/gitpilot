@@ -11,9 +11,15 @@ import {
   Shield,
   ChevronLeft,
   ChevronRight,
+  Crown,
 } from 'lucide-react';
+import { useAuthStore } from '../../store/authStore';
+import { APP_VERSION } from '../../config/version';
+
+import { GitPilotLogo } from '../common/GitPilotLogo';
 
 export function Sidebar({ collapsed, onToggleCollapse, gitStatus }) {
+  const { isAdmin } = useAuthStore();
   const navItems = [
     { label: 'Overview', to: '/', icon: LayoutDashboard, shortcut: '⌘1' },
     { label: 'Projects', to: '/projects', icon: FolderGit2, shortcut: '⌘2' },
@@ -35,12 +41,12 @@ export function Sidebar({ collapsed, onToggleCollapse, gitStatus }) {
       {/* Brand Header */}
       <div style={{ padding: '16px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
-          <img src="/logo.svg" alt="GitPilot" style={{ width: '24px', height: '24px', flexShrink: 0 }} />
+          <GitPilotLogo size={24} />
           {!collapsed && (
             <div>
               <div style={{ fontWeight: 600, fontSize: '14px', letterSpacing: '-0.02em', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 GitPilot
-                <span style={{ fontSize: '9.5px', background: 'var(--primary-subtle)', color: 'var(--primary-bright)', padding: '1px 5px', borderRadius: '4px' }}>v1.0</span>
+                <span style={{ fontSize: '9.5px', background: 'var(--primary-subtle)', color: 'var(--primary-bright)', padding: '1px 5px', borderRadius: '4px' }}>v{APP_VERSION}</span>
               </div>
             </div>
           )}
@@ -164,6 +170,37 @@ export function Sidebar({ collapsed, onToggleCollapse, gitStatus }) {
             })}
           </nav>
         </div>
+
+        {/* Administration Section (Owner / Admin Only) */}
+        {isAdmin && (
+          <div>
+            {!collapsed && <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#F59E0B', fontWeight: 600, padding: '0 8px 6px 8px', letterSpacing: '0.05em' }}>ADMINISTRATION</div>}
+            <nav style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <NavLink
+                to="/admin"
+                style={({ isActive }) => ({
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: collapsed ? 'center' : 'space-between',
+                  padding: '7px 10px',
+                  borderRadius: 'var(--radius-sm)',
+                  color: isActive ? '#FFFFFF' : '#F59E0B',
+                  backgroundColor: isActive ? 'rgba(245, 158, 11, 0.15)' : 'transparent',
+                  border: isActive ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid transparent',
+                  textDecoration: 'none',
+                  fontSize: '12.5px',
+                  fontWeight: isActive ? 600 : 500,
+                })}
+                title={collapsed ? 'Admin Console' : undefined}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                  <Crown size={16} style={{ color: '#F59E0B' }} />
+                  {!collapsed && <span>Admin Console</span>}
+                </div>
+              </NavLink>
+            </nav>
+          </div>
+        )}
       </div>
 
       {/* Footer Git Status Indicator */}

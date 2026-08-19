@@ -5,6 +5,9 @@ node_modules/
 
 # Build Outputs
 dist/
+dist-app/
+dist-installer/
+dist-release/
 dist-ssr/
 build/
 target/

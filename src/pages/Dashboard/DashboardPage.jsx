@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FolderGit2,
@@ -7,16 +7,14 @@ import {
   Flame,
   ArrowRight,
   Plus,
-  Play,
   RefreshCw,
-  CheckCircle2,
-  AlertTriangle,
-  FileText,
+  FolderSearch,
 } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { useActivityStore } from '../../store/activityStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { ProjectCard } from '../../components/projects/ProjectCard';
+import { Button, TextButton, Card, Badge, EmptyState } from '../../components/ui';
 
 export function DashboardPage({ onOpenAddModal, onOpenScanModal, onCommitPreview, onOpenDiff }) {
   const navigate = useNavigate();
@@ -47,7 +45,6 @@ export function DashboardPage({ onOpenAddModal, onOpenScanModal, onCommitPreview
 
   // Streak computation (consecutive active days)
   const currentStreak = Math.max(1, Math.min(14, todaysPushes > 0 ? 14 : 13));
-
   const changedRepos = repositories.filter((r) => r.status === 'CHANGES' || r.filesChanged > 0);
 
   return (
@@ -64,31 +61,29 @@ export function DashboardPage({ onOpenAddModal, onOpenScanModal, onCommitPreview
         </div>
 
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={scanAll} disabled={isScanningAll} className="btn btn-secondary">
-            <RefreshCw size={13} className={isScanningAll ? 'animate-spin' : ''} />
-            <span>Scan Repositories</span>
-          </button>
-          <button onClick={onOpenAddModal} className="btn btn-primary">
-            <Plus size={13} />
-            <span>Add Repository</span>
-          </button>
+          <Button
+            variant="secondary"
+            onClick={scanAll}
+            disabled={isScanningAll}
+            loading={isScanningAll}
+            icon={RefreshCw}
+          >
+            Scan Repositories
+          </Button>
+          <Button
+            variant="primary"
+            onClick={onOpenAddModal}
+            icon={Plus}
+          >
+            Add Repository
+          </Button>
         </div>
       </div>
 
       {/* Top Metrics Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
         {/* Metric 1 */}
-        <div
-          style={{
-            backgroundColor: 'var(--bg-surface)',
-            border: '1px solid var(--border-default)',
-            borderRadius: 'var(--radius-md)',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-          }}
-        >
+        <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
             <span style={{ fontSize: '12px', fontWeight: 500 }}>Repositories</span>
             <FolderGit2 size={15} />
@@ -103,20 +98,10 @@ export function DashboardPage({ onOpenAddModal, onOpenScanModal, onCommitPreview
               'All working trees clean'
             )}
           </div>
-        </div>
+        </Card>
 
         {/* Metric 2 */}
-        <div
-          style={{
-            backgroundColor: 'var(--bg-surface)',
-            border: '1px solid var(--border-default)',
-            borderRadius: 'var(--radius-md)',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-          }}
-        >
+        <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
             <span style={{ fontSize: '12px', fontWeight: 500 }}>Automation</span>
             <Zap size={15} style={{ color: 'var(--primary-bright)' }} />
@@ -127,20 +112,10 @@ export function DashboardPage({ onOpenAddModal, onOpenScanModal, onCommitPreview
           <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
             Scheduled at {settings.defaultScheduleTime || '19:00'} daily
           </div>
-        </div>
+        </Card>
 
         {/* Metric 3 */}
-        <div
-          style={{
-            backgroundColor: 'var(--bg-surface)',
-            border: '1px solid var(--border-default)',
-            borderRadius: 'var(--radius-md)',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-          }}
-        >
+        <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
             <span style={{ fontSize: '12px', fontWeight: 500 }}>Today's Pushes</span>
             <GitPullRequest size={15} style={{ color: 'var(--success)' }} />
@@ -151,20 +126,10 @@ export function DashboardPage({ onOpenAddModal, onOpenScanModal, onCommitPreview
           <div style={{ fontSize: '11px', color: 'var(--success)' }}>
             Real development commits
           </div>
-        </div>
+        </Card>
 
         {/* Metric 4 */}
-        <div
-          style={{
-            backgroundColor: 'var(--bg-surface)',
-            border: '1px solid var(--border-default)',
-            borderRadius: 'var(--radius-md)',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-          }}
-        >
+        <Card style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
             <span style={{ fontSize: '12px', fontWeight: 500 }}>Current Streak</span>
             <Flame size={15} style={{ color: 'var(--warning)' }} />
@@ -175,56 +140,40 @@ export function DashboardPage({ onOpenAddModal, onOpenScanModal, onCommitPreview
           <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
             Consistent active workflow
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Projects Section */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
           <div>
-            <h2 style={{ fontSize: '16px' }}>Active Repositories</h2>
+            <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>Active Repositories</h2>
             <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Tracked projects and working tree status</p>
           </div>
-          <button
+          <TextButton
             onClick={() => navigate('/projects')}
-            className="btn-ghost"
-            style={{ fontSize: '12px', color: 'var(--primary-bright)', display: 'flex', alignItems: 'center', gap: '4px', border: 'none', background: 'transparent', cursor: 'pointer' }}
+            icon={ArrowRight}
+            style={{ fontSize: '12px' }}
           >
-            <span>View all ({repositories.length})</span>
-            <ArrowRight size={13} />
-          </button>
+            View all ({repositories.length})
+          </TextButton>
         </div>
 
         {repositories.length === 0 ? (
-          <div
-            style={{
-              backgroundColor: 'var(--bg-surface)',
-              border: '1px dashed var(--border-default)',
-              borderRadius: 'var(--radius-md)',
-              padding: '40px 20px',
-              textAlign: 'center',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '12px',
-            }}
+          <EmptyState
+            icon={FolderGit2}
+            title="No Repositories Registered"
+            description="Add your local Git projects or scan an entire workspace folder to begin automating your workflow."
           >
-            <FolderGit2 size={36} style={{ color: 'var(--text-muted)' }} />
-            <div>
-              <h3 style={{ fontSize: '15px' }}>No Repositories Registered</h3>
-              <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginTop: '4px', maxWidth: '360px' }}>
-                Add your local Git projects or scan an entire workspace folder to begin automating your workflow.
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-              <button onClick={onOpenScanModal} className="btn btn-secondary">
+            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+              <Button variant="secondary" size="sm" onClick={onOpenScanModal} icon={FolderSearch}>
                 Scan Workspace Folder
-              </button>
-              <button onClick={onOpenAddModal} className="btn btn-primary">
+              </Button>
+              <Button variant="primary" size="sm" onClick={onOpenAddModal} icon={Plus}>
                 Add Repository
-              </button>
+              </Button>
             </div>
-          </div>
+          </EmptyState>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
             {repositories.slice(0, 6).map((repo) => (
@@ -243,16 +192,16 @@ export function DashboardPage({ onOpenAddModal, onOpenScanModal, onCommitPreview
       <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
           <div>
-            <h2 style={{ fontSize: '16px' }}>Today's Activity</h2>
+            <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>Today's Activity</h2>
             <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Real-time execution log and commit history</p>
           </div>
-          <button
+          <TextButton
             onClick={() => navigate('/activity')}
-            className="btn-ghost"
-            style={{ fontSize: '12px', color: 'var(--primary-bright)', display: 'flex', alignItems: 'center', gap: '4px', border: 'none', background: 'transparent', cursor: 'pointer' }}
+            icon={ArrowRight}
+            style={{ fontSize: '12px' }}
           >
-            <span>Full History →</span>
-          </button>
+            Full History
+          </TextButton>
         </div>
 
         {history.length === 0 ? (
@@ -303,9 +252,9 @@ export function DashboardPage({ onOpenAddModal, onOpenScanModal, onCommitPreview
                         <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>
                           {item.repositoryName}
                         </span>
-                        <span className={`badge ${item.status === 'SUCCESS' ? 'badge-success' : item.status === 'FAILED' ? 'badge-failed' : 'badge-no-changes'}`}>
+                        <Badge variant={item.status === 'SUCCESS' ? 'success' : item.status === 'FAILED' ? 'danger' : 'default'}>
                           {item.status === 'SUCCESS' ? 'Pushed' : item.status === 'FAILED' ? 'Failed' : 'No changes'}
-                        </span>
+                        </Badge>
                       </div>
                       <div className="font-mono" style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
                         {item.commitMessage || item.error || 'Working tree clean'}
