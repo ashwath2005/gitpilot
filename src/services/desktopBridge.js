@@ -305,6 +305,20 @@ export const desktopBridge = {
         console.warn('Dialog error:', e);
       }
     }
+
+    try {
+      const res = await fetch('/api/desktop-bridge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'select-directory' }),
+      });
+      const data = await res.json();
+      if (data.success && data.path) {
+        return data.path;
+      }
+    } catch (e) {
+      console.warn('Directory dialog error:', e);
+    }
     return null;
   },
 

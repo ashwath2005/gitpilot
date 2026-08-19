@@ -31,6 +31,16 @@ const DEFAULT_SETTINGS = {
   theme: 'dark',
 };
 
+// Known legacy developer demo IDs from pre-v1.2 builds to purge from existing local storage
+const LEGACY_DEV_REPO_IDS = new Set([
+  'repo_dsa_vis',
+  'repo_anburajan_uncle',
+  'repo_portfolio',
+  'repo_genai_capstone',
+  'repo_final_year',
+  'repo_gitpilot',
+]);
+
 export const databaseService = {
   // --- Onboarding ---
   isOnboardingCompleted() {
@@ -44,7 +54,31 @@ export const databaseService = {
   // --- Repositories ---
   async getRepositories() {
     const raw = localStorage.getItem(STORAGE_KEYS.REPOSITORIES);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    try {
+      const repos = JSON.parse(raw);
+      if (Array.isArray(repos)) {
+        // Automatically clean up previously cached development repositories
+        const filtered = repos.filter((r) => !LEGACY_DEV_REPO_IDS.has(r.id));
+        if (filtered.length !== repos.length) {
+          localStorage.setItem(STORAGE_KEYS.REPOSITORIES, JSON.stringify(filtered));
+          if (filtered.length === 0) {
+            localStorage.removeItem(STORAGE_KEYS.ONBOARDING_COMPLETED);
+          }
+          return filtered;
+        }
+        return repos;
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  },
+
+  async clearAllRepositories() {
+    localStorage.removeItem(STORAGE_KEYS.REPOSITORIES);
+    localStorage.removeItem(STORAGE_KEYS.ONBOARDING_COMPLETED);
+    return [];
   },
 
   async saveRepositories(repositories) {

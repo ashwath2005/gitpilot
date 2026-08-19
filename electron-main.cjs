@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, shell, dialog } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
@@ -144,6 +144,26 @@ function startEmbeddedProductionServer() {
             } catch (err) {
               res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify({ success: false, error: 'Git not found in PATH' }));
+            }
+            return;
+          }
+
+          if (action === 'select-directory') {
+            try {
+              const resDialog = await dialog.showOpenDialog(mainWindow, {
+                properties: ['openDirectory'],
+                title: 'Select Workspace Directory',
+              });
+              if (!resDialog.canceled && resDialog.filePaths.length > 0) {
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: true, path: resDialog.filePaths[0] }));
+                return;
+              }
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, canceled: true }));
+            } catch (err) {
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, error: err.message }));
             }
             return;
           }

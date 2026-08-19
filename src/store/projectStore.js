@@ -16,9 +16,13 @@ export const useProjectStore = create((set, get) => ({
       set({ repositories: repos, isLoading: false });
 
       // Run live scan for accurate branch and changes on initial load
-      get().scanAll();
+      if (repos && repos.length > 0) {
+        get().scanAll();
+      }
+      return repos;
     } catch (err) {
       set({ error: err.message, isLoading: false });
+      return [];
     }
   },
 

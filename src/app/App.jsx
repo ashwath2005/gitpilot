@@ -54,14 +54,15 @@ function AppContent() {
   useEffect(() => {
     // Initial data, cloud session, and updater load
     initializeAuth();
-    fetchRepositories();
     fetchSettings();
     fetchUpdateStatus();
 
-    // Check if onboarding completed
-    if (!databaseService.isOnboardingCompleted()) {
-      setIsOnboardingOpen(true);
-    }
+    fetchRepositories().then((repos) => {
+      // Check if onboarding completed or if workspace is brand new / reset
+      if (!databaseService.isOnboardingCompleted() || !repos || repos.length === 0) {
+        setIsOnboardingOpen(true);
+      }
+    });
 
     // Check Git environment
     desktopBridge.checkGit().then((res) => {
