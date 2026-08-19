@@ -16,7 +16,7 @@ let isGitLocked = false;
 // In-Memory Update State Machine
 let updateState = {
   status: 'IDLE', // IDLE | CHECKING | AVAILABLE | NOT_AVAILABLE | DOWNLOADING | DOWNLOADED | INSTALLING | ERROR
-  currentVersion: app.getVersion() || '1.1.0',
+  currentVersion: app.getVersion() || '1.2.0',
   latestVersion: null,
   releaseNotes: '',
   releaseDate: null,
@@ -53,6 +53,7 @@ function initUpdater(mainWindow, tray) {
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.allowPrerelease = updateState.channel === 'beta' || updateState.channel === 'alpha';
     autoUpdater.allowDowngrade = false;
+    autoUpdater.forceDevUpdateConfig = true;
   } catch (err) {
     console.warn('[AutoUpdater] Config warning:', err?.message || err);
   }

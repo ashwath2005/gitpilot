@@ -1,9 +1,17 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to **GitPilot** will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [1.2.0] - 2026-08-19
+
+### Fixed
+- **Clean Installation & Workspace Isolation**: Removed development project seeding defaults so new users start with a clean workspace without developer projects showing.
+- **Dynamic Version Tracking**: Synchronized application version across frontend settings, device tracking, admin views, and build packaging.
 
 ---
 

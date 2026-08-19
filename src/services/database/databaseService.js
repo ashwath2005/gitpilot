@@ -5,7 +5,6 @@
 
 const STORAGE_KEYS = {
   REPOSITORIES: 'gitpilot_repositories',
-  REMOVED_REPOS: 'gitpilot_removed_repos',
   SCHEDULES: 'gitpilot_schedules',
   PUSH_HISTORY: 'gitpilot_push_history',
   SETTINGS: 'gitpilot_settings',
@@ -32,76 +31,6 @@ const DEFAULT_SETTINGS = {
   theme: 'dark',
 };
 
-// Default discovered user project configurations
-const DEFAULT_USER_REPOSITORIES = [
-  {
-    id: 'repo_dsa_vis',
-    name: 'DSA VIS (ALGO3D)',
-    path: 'D:\\DSA VIS',
-    remoteUrl: 'git@github.com:ashwath2005/ALGO3D-.git',
-    remoteName: 'origin',
-    branch: 'main',
-    enabled: true,
-    status: 'READY',
-    filesChanged: 0,
-  },
-  {
-    id: 'repo_anburajan_uncle',
-    name: 'Anburajan Uncle',
-    path: 'D:\\Anburajan Uncle',
-    remoteUrl: 'https://github.com/ashwath2005/anburajan-uncle.git',
-    remoteName: 'origin',
-    branch: 'main',
-    enabled: true,
-    status: 'CHANGES',
-    filesChanged: 136,
-  },
-  {
-    id: 'repo_portfolio',
-    name: 'Portfolio',
-    path: 'D:\\Portfolio',
-    remoteUrl: 'git@github.com:ashwath2005/portfolio.git',
-    remoteName: 'origin',
-    branch: 'main',
-    enabled: true,
-    status: 'READY',
-    filesChanged: 0,
-  },
-  {
-    id: 'repo_genai_capstone',
-    name: 'FRESH GENAI CAPSTONE PROJECT',
-    path: 'D:\\FRESH GENAI CAPSTONE PROJECT',
-    remoteUrl: 'git@github.com:ashwath2005/archon-ai-governance-hub.git',
-    remoteName: 'origin',
-    branch: 'main',
-    enabled: true,
-    status: 'CHANGES',
-    filesChanged: 1,
-  },
-  {
-    id: 'repo_final_year',
-    name: 'Final Year',
-    path: 'D:\\FInal Year',
-    remoteUrl: 'local',
-    remoteName: 'origin',
-    branch: 'main',
-    enabled: true,
-    status: 'READY',
-    filesChanged: 0,
-  },
-  {
-    id: 'repo_gitpilot',
-    name: 'GitPilot',
-    path: 'd:\\GitPilot',
-    remoteUrl: 'local',
-    remoteName: 'origin',
-    branch: 'main',
-    enabled: true,
-    status: 'READY',
-    filesChanged: 0,
-  },
-];
-
 export const databaseService = {
   // --- Onboarding ---
   isOnboardingCompleted() {
@@ -115,37 +44,7 @@ export const databaseService = {
   // --- Repositories ---
   async getRepositories() {
     const raw = localStorage.getItem(STORAGE_KEYS.REPOSITORIES);
-    const removedRaw = localStorage.getItem(STORAGE_KEYS.REMOVED_REPOS);
-    const removedSet = new Set(removedRaw ? JSON.parse(removedRaw) : []);
-
-    let repos = raw ? JSON.parse(raw) : [];
-
-    // Automatically ensure discovered user workspaces are included unless explicitly deleted
-    let updated = false;
-    for (const defaultRepo of DEFAULT_USER_REPOSITORIES) {
-      if (removedSet.has(defaultRepo.id) || removedSet.has(defaultRepo.path.toLowerCase())) {
-        continue;
-      }
-      const exists = repos.some(
-        (r) => (r.path || '').toLowerCase() === defaultRepo.path.toLowerCase()
-      );
-      if (!exists) {
-        repos.push({
-          ...defaultRepo,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          lastScanAt: new Date().toISOString(),
-          lastPushAt: null,
-        });
-        updated = true;
-      }
-    }
-
-    if (updated || !raw) {
-      localStorage.setItem(STORAGE_KEYS.REPOSITORIES, JSON.stringify(repos));
-    }
-
-    return repos;
+    return raw ? JSON.parse(raw) : [];
   },
 
   async saveRepositories(repositories) {
@@ -157,15 +56,6 @@ export const databaseService = {
     const existing = repos.find((r) => r.path.toLowerCase() === repo.path.toLowerCase());
     if (existing) {
       return await this.updateRepository(existing.id, repo);
-    }
-
-    // Un-mark from removed list if user re-adds
-    const removedRaw = localStorage.getItem(STORAGE_KEYS.REMOVED_REPOS);
-    if (removedRaw) {
-      const list = JSON.parse(removedRaw).filter(
-        (p) => p !== repo.id && p !== repo.path.toLowerCase()
-      );
-      localStorage.setItem(STORAGE_KEYS.REMOVED_REPOS, JSON.stringify(list));
     }
 
     const newRepo = {
@@ -203,17 +93,7 @@ export const databaseService = {
 
   async deleteRepository(id) {
     const repos = await this.getRepositories();
-    const target = repos.find((r) => r.id === id);
     const filtered = repos.filter((r) => r.id !== id);
-
-    if (target) {
-      const removedRaw = localStorage.getItem(STORAGE_KEYS.REMOVED_REPOS);
-      const list = removedRaw ? JSON.parse(removedRaw) : [];
-      list.push(target.id);
-      if (target.path) list.push(target.path.toLowerCase());
-      localStorage.setItem(STORAGE_KEYS.REMOVED_REPOS, JSON.stringify(list));
-    }
-
     await this.saveRepositories(filtered);
   },
 

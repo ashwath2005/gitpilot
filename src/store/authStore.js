@@ -1,5 +1,6 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import { authService, userService, deviceService, isSupabaseConfigured } from '../services/cloud';
+import { APP_VERSION } from '../config/version';
 
 export const useAuthStore = create((set, get) => ({
   user: null,
@@ -55,7 +56,7 @@ export const useAuthStore = create((set, get) => ({
         // Update last active and register device if not suspended
         if (!isSuspended) {
           await userService.updateLastActive(user.id);
-          await deviceService.registerOrUpdateDevice(user.id, '1.1.0');
+          await deviceService.registerOrUpdateDevice(user.id, APP_VERSION);
         }
 
         const devices = await deviceService.getUserDevices(user.id);
@@ -150,7 +151,7 @@ export const useAuthStore = create((set, get) => ({
 
     if (!isSuspended) {
       await userService.updateLastActive(user.id);
-      await deviceService.registerOrUpdateDevice(user.id, '1.1.0');
+      await deviceService.registerOrUpdateDevice(user.id, APP_VERSION);
     }
 
     const devices = await deviceService.getUserDevices(user.id);
@@ -192,7 +193,7 @@ export const useAuthStore = create((set, get) => ({
         email: user.email,
         displayName,
       });
-      await deviceService.registerOrUpdateDevice(user.id, '1.1.0');
+      await deviceService.registerOrUpdateDevice(user.id, APP_VERSION);
       devices = await deviceService.getUserDevices(user.id);
     }
 

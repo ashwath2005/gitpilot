@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   User,
@@ -15,6 +15,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { userService, deviceService } from '../../services/cloud';
+import { APP_VERSION } from '../../config/version';
 
 export function UserDetailsModal({ user, isOpen, onClose, onUserUpdated }) {
   const [devices, setDevices] = useState([]);
@@ -224,7 +225,7 @@ export function UserDetailsModal({ user, isOpen, onClose, onUserUpdated }) {
                       <div>
                         <div style={{ fontSize: '12.5px', fontWeight: 500 }}>{d.device_name || 'PC'}</div>
                         <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                          ID: {d.device_id?.substring(0, 16)}... • v{d.app_version || '1.1.0'}
+                          ID: {d.device_id?.substring(0, 16)}... • v{d.app_version || APP_VERSION}
                         </div>
                       </div>
                     </div>

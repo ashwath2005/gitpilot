@@ -253,7 +253,7 @@ export function SettingsPage() {
                 <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', padding: '14px', borderRadius: 'var(--radius-sm)' }}>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>GITPILOT VERSION</div>
                   <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    v1.1.0
+                    v{APP_VERSION}
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Latest Windows Release</div>
                 </div>
@@ -315,7 +315,7 @@ export function SettingsPage() {
                           <div>
                             <div style={{ fontSize: '12.5px', fontWeight: 500 }}>{d.device_name || 'Windows PC'} (Current)</div>
                             <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                              ID: {d.device_id?.substring(0, 16)}... • v{d.app_version || '1.1.0'}
+                              ID: {d.device_id?.substring(0, 16)}... • v{d.app_version || APP_VERSION}
                             </div>
                           </div>
                         </div>
