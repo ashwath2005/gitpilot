@@ -16,7 +16,7 @@ let isGitLocked = false;
 // In-Memory Update State Machine
 let updateState = {
   status: 'IDLE', // IDLE | CHECKING | AVAILABLE | NOT_AVAILABLE | DOWNLOADING | DOWNLOADED | INSTALLING | ERROR
-  currentVersion: app.getVersion() || '1.2.0',
+  currentVersion: (app && app.getVersion && app.getVersion()) || require('../package.json').version || '1.0.0',
   latestVersion: null,
   releaseNotes: '',
   releaseDate: null,

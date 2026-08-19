@@ -104,13 +104,25 @@ export function ScanWorkspaceModal({ isOpen, onClose }) {
             <Button
               variant="secondary"
               size="md"
+              type="button"
+              onClick={async () => {
+                const selected = await desktopBridge.selectDirectory();
+                if (selected) setWorkspacePath(selected);
+              }}
+              style={{ marginBottom: '1px' }}
+            >
+              <FolderSearch size={14} style={{ marginRight: '6px' }} />
+              <span>Browse</span>
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
               loading={isScanning}
               disabled={isScanning || !workspacePath.trim()}
               onClick={handleScan}
-              icon={FolderSearch}
               style={{ marginBottom: '1px' }}
             >
-              Scan
+              <span>Scan Folder</span>
             </Button>
           </div>
         </div>

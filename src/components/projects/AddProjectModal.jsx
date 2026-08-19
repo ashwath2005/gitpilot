@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Folder, CheckCircle, AlertCircle, Loader2, PlusCircle, Check } from 'lucide-react';
 import { useProjectStore } from '../../store/projectStore';
 import { gitService } from '../../services/git/gitService';
@@ -169,41 +169,13 @@ export function AddProjectModal({ isOpen, onClose }) {
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {/* Suggestions */}
-        <div>
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
-            Quick suggestions:
-          </span>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            {['d:\\GitPilot', 'd:/GitPilot'].map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setPath(s)}
-                className="btn-ghost font-mono"
-                style={{
-                  fontSize: '11px',
-                  padding: '3px 8px',
-                  borderRadius: '4px',
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border-subtle)',
-                  cursor: 'pointer',
-                  color: 'var(--primary-bright)',
-                }}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
             <div style={{ flex: 1 }}>
               <Input
                 label="Repository Path"
                 type="text"
-                placeholder="e.g. D:\GitPilot or D:\Projects\MyAwesomeApp"
+                placeholder="e.g. D:\Projects\MyAwesomeApp"
                 className="font-mono"
                 value={path}
                 onChange={(e) => setPath(e.target.value)}
@@ -214,12 +186,25 @@ export function AddProjectModal({ isOpen, onClose }) {
             <Button
               variant="secondary"
               size="md"
+              type="button"
+              onClick={async () => {
+                const selected = await desktopBridge.selectDirectory();
+                if (selected) setPath(selected);
+              }}
+              style={{ marginBottom: '1px' }}
+            >
+              <Folder size={14} style={{ marginRight: '6px' }} />
+              <span>Browse</span>
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
               loading={isValidating}
               disabled={isValidating || !path.trim()}
               onClick={handleValidateNow}
               style={{ marginBottom: '1px' }}
             >
-              Validate
+              <span>Validate</span>
             </Button>
           </div>
         </div>

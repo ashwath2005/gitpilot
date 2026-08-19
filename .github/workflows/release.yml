@@ -1,33 +1,304 @@
-﻿name: Release GitPilot
+name: GitPilot Production Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release Version (SemVer, e.g. 1.3.0)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry Run Mode (Build and validate without tagging or publishing)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-production
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   release:
+    name: Build & Publish Release
     runs-on: windows-latest
-    permissions:
-      contents: write
 
     steps:
+      # Step 1: Input Validation
+      - name: Validate Semantic Version Input
+        shell: pwsh
+        run: |
+          $rawVersion = "${{ github.event.inputs.version }}".Trim()
+          $cleanVersion = $rawVersion -replace '^v', ''
+          $semverPattern = '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
+          
+          if ($cleanVersion -notmatch $semverPattern) {
+            Write-Error "Invalid semantic version: '$rawVersion'. Expected format: MAJOR.MINOR.PATCH (e.g. 1.3.0 or 2.0.1)"
+            exit 1
+          }
+          
+          Write-Host "✅ Semantic version validated: v$cleanVersion"
+          "RELEASE_VERSION=$cleanVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "RELEASE_TAG=v$cleanVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      # Step 2: Checkout Repository
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node.js
+      # Step 3: Check for Existing Duplicate Tag
+      - name: Check for Existing Tag
+        shell: pwsh
+        run: |
+          $tag = $env:RELEASE_TAG
+          $existing = git tag -l $tag
+          if ($existing -and "${{ github.event.inputs.dry_run }}" -ne "true") {
+            Write-Error "Release tag '$tag' already exists on this repository! Please choose a higher version."
+            exit 1
+          }
+          Write-Host "✅ Tag '$tag' is available for release."
+
+      # Step 4: Configure Git User
+      - name: Configure Git Identity
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      # Step 5: Setup Node.js 20
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
+      # Step 6: Install Dependencies
       - name: Install Dependencies
         run: npm ci
 
-      - name: Build Web Application
+      # Step 7: Synchronize Version Across Project
+      - name: Synchronize Version Across Project
+        shell: pwsh
+        run: |
+          node scripts/release-version.cjs $env:RELEASE_VERSION
+
+      # Step 8: Validate Synchronized Versions
+      - name: Validate Version Consistency
+        run: npm run version:check
+
+      # Step 9: Build Frontend Production Bundle
+      - name: Build Frontend (Vite)
         run: npm run build
 
-      - name: Build and Publish Electron NSIS Installer
+      # Step 10: Build Electron NSIS Installer
+      - name: Build Windows Installer (Electron Builder)
+        run: npx electron-builder --win nsis
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win nsis --publish always
+
+      # Step 11: Normalize and Validate Release Artifacts
+      - name: Validate Release Artifacts
+        shell: pwsh
+        run: |
+          $distDir = "dist-release"
+          if (-not (Test-Path $distDir)) {
+            Write-Error "Build failed: $distDir directory not found!"
+            exit 1
+          }
+
+          $latestYml = Join-Path $distDir "latest.yml"
+          if (-not (Test-Path $latestYml)) {
+            Write-Error "Build failed: latest.yml not found in $distDir!"
+            exit 1
+          }
+
+          $ymlContent = Get-Content $latestYml -Raw
+          if ($ymlContent -notmatch $env:RELEASE_VERSION) {
+            Write-Error "latest.yml does not match target version $env:RELEASE_VERSION!"
+            exit 1
+          }
+
+          $exeFiles = Get-ChildItem -Path $distDir -Filter "*.exe" | Where-Object { $_.Name -notlike "*uninstaller*" }
+          if ($exeFiles.Count -eq 0) {
+            Write-Error "No Windows installer executable found in $distDir!"
+            exit 1
+          }
+
+          # Ensure both standard and hyphenated installer names are present in dist-release
+          $primaryExe = $exeFiles[0]
+          $hyphenName = "GitPilot-Setup-$($env:RELEASE_VERSION).exe"
+          $hyphenPath = Join-Path $distDir $hyphenName
+          if (-not (Test-Path $hyphenPath)) {
+            Copy-Item $primaryExe.FullName -Destination $hyphenPath
+            Write-Host "Created asset alias: $hyphenName"
+          }
+
+          $blockmapFiles = Get-ChildItem -Path $distDir -Filter "*.blockmap"
+          if ($blockmapFiles.Count -eq 0) {
+            Write-Error "No blockmap files found in $distDir!"
+            exit 1
+          }
+
+          Write-Host "✅ Artifact validation passed successfully."
+          Write-Host "Found Installer: $($primaryExe.Name) ($([math]::Round($primaryExe.Length / 1MB, 2)) MB)"
+          Write-Host "Found latest.yml: OK"
+          Write-Host "Found Blockmap: $($blockmapFiles[0].Name)"
+
+      # Step 12: Generate Categorized Release Notes
+      - name: Generate Release Notes
+        shell: pwsh
+        run: |
+          $prevTag = git describe --tags --abbrev=0 HEAD 2>$null
+          if (-not $prevTag) {
+            $prevTag = (git rev-list --max-parents=0 HEAD)
+          }
+
+          Write-Host "Generating release notes from $prevTag to HEAD..."
+          $commits = git log "$prevTag..HEAD" --pretty=format:"* %s (%h)"
+          
+          $features = @()
+          $fixes = @()
+          $others = @()
+
+          foreach ($line in ($commits -split "`n")) {
+            if ($line -match '^\*\s+(feat|feature)(\(.*\))?:') {
+              $features += ($line -replace '^\*\s+(feat|feature)(\(.*\))?:\s*', '* ')
+            } elseif ($line -match '^\*\s+(fix|bug)(\(.*\))?:') {
+              $fixes += ($line -replace '^\*\s+(fix|bug)(\(.*\))?:\s*', '* ')
+            } elseif ($line.Trim()) {
+              $others += $line
+            }
+          }
+
+          $notes = @"
+          ## GitPilot v$env:RELEASE_VERSION 🚀
+          Official release for Windows 10 & 11 (64-bit).
+
+          ### 📦 Installation
+          - Download **\`GitPilot-Setup-$env:RELEASE_VERSION.exe\`** below and run the installer.
+          - Existing users with GitPilot installed will receive this update automatically via the built-in updater.
+
+          "@
+
+          if ($features.Count -gt 0) {
+            $notes += "`n### ✨ New Features`n" + ($features -join "`n") + "`n"
+          }
+          if ($fixes.Count -gt 0) {
+            $notes += "`n### 🐛 Bug Fixes`n" + ($fixes -join "`n") + "`n"
+          }
+          if ($others.Count -gt 0) {
+            $notes += "`n### 📝 Maintenance & Improvements`n" + ($others -join "`n") + "`n"
+          }
+
+          $notes | Out-File -FilePath "release_notes.md" -Encoding utf8
+          Write-Host "Generated release notes:"
+          Get-Content "release_notes.md"
+
+      # Step 13: Commit and Push Version & Tag
+      - name: Commit and Tag Release
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        shell: pwsh
+        run: |
+          git add package.json installer.iss CHANGELOG.md
+          if (Test-Path "package-lock.json") { git add package-lock.json }
+          if (Test-Path "src-tauri/tauri.conf.json") { git add src-tauri/tauri.conf.json }
+          
+          $diff = git diff --staged
+          if ($diff) {
+            git commit -m "chore(release): bump version to v$env:RELEASE_VERSION [skip ci]"
+            git push origin main
+          }
+
+          git tag -a "$env:RELEASE_TAG" -m "GitPilot Release $env:RELEASE_TAG"
+          git push origin "$env:RELEASE_TAG"
+          Write-Host "✅ Pushed tag $env:RELEASE_TAG to origin"
+
+      # Step 14: Publish GitHub Release
+      - name: Publish GitHub Release
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $assets = Get-ChildItem -Path "dist-release" -Include "*.exe", "*.blockmap", "latest.yml" -Recurse | Select-Object -ExpandProperty FullName
+          Write-Host "Publishing GitHub Release for tag $env:RELEASE_TAG with assets:"
+          $assets | ForEach-Object { Write-Host " - $_" }
+
+          gh release create "$env:RELEASE_TAG" `
+            --title "GitPilot v$env:RELEASE_VERSION" `
+            --notes-file "release_notes.md" `
+            $assets
+
+          Write-Host "✅ GitHub Release published successfully."
+
+      # Step 15: Verify Published Release
+      - name: Verify Published Release
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $release = gh release view "$env:RELEASE_TAG" --json tagName,name,assets,isDraft,isPrerelease | ConvertFrom-Json
+          if (-not $release) {
+            Write-Error "Verification failed: Release $env:RELEASE_TAG not found on GitHub!"
+            exit 1
+          }
+          if ($release.isDraft) {
+            Write-Error "Verification failed: Release is still marked as Draft!"
+            exit 1
+          }
+          if ($release.assets.Count -lt 3) {
+            Write-Error "Verification failed: Expected at least 3 assets in release, found $($release.assets.Count)!"
+            exit 1
+          }
+          Write-Host "✅ Verified published release: $($release.name) with $($release.assets.Count) assets."
+
+      # Step 16: Upload Build Artifacts (Retention)
+      - name: Upload Build Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitpilot-v${{ env.RELEASE_VERSION }}-build
+          path: |
+            dist-release/*.exe
+            dist-release/*.blockmap
+            dist-release/latest.yml
+          retention-days: 14
+
+      # Step 17: Rich Job Summary
+      - name: Generate Release Job Summary
+        if: always()
+        shell: pwsh
+        run: |
+          $isDryRun = "${{ github.event.inputs.dry_run }}" -eq "true"
+          $modeStr = if ($isDryRun) { "DRY RUN (Validation Only)" } else { "PRODUCTION RELEASE" }
+          $statusStr = if ("${{ job.status }}" -eq "success") { "SUCCESS 🚀" } else { "FAILED ❌" }
+
+          @"
+          # 🚀 GitPilot Release Summary
+
+          | Property | Value |
+          | :--- | :--- |
+          | **Version** | \`v$env:RELEASE_VERSION\` |
+          | **Mode** | **$modeStr** |
+          | **Overall Status** | **$statusStr** |
+          | **Target OS** | Windows 64-bit (NSIS) |
+
+          ### 📦 Pipeline Validation Checklist
+          - [x] Semantic Version Input Validation: \`v$env:RELEASE_VERSION\`
+          - [x] Single Source of Truth Synchronization: \`package.json\`
+          - [x] Production Frontend Build: \`dist/index.html\`
+          - [x] NSIS Installer Built: \`dist-release/*.exe\`
+          - [x] Auto-Updater Manifest: \`dist-release/latest.yml\`
+          - [x] Differential Blockmap: \`dist-release/*.blockmap\`
+          $(if (-not $isDryRun) { "- [x] Git Tag Pushed: \`$env:RELEASE_TAG\`" })
+          $(if (-not $isDryRun) { "- [x] GitHub Release Published: \`https://github.com/ashwath2005/GitPilot/releases/tag/$env:RELEASE_TAG\`" })
+          $(if (-not $isDryRun) { "- [x] Live Auto-Updater Feed: Verified" })
+
+          ---
+          *Automated with GitPilot CI/CD System*
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8

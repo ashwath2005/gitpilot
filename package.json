@@ -15,6 +15,8 @@
     "release": "vite build && electron-builder --win --publish always",
     "installer": "electron-builder --win nsis",
     "package": "npx @electron/packager . GitPilot --platform=win32 --arch=x64 --icon=src-tauri/icons/icon.ico --out=dist-app --overwrite",
+    "version:sync": "node scripts/release-version.cjs",
+    "version:check": "node scripts/release-version.cjs --validate-only",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"

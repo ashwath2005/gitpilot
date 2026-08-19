@@ -54,14 +54,20 @@ export function OnboardingModal({ isOpen, onComplete }) {
     setIsScanning(true);
     try {
       const res = await desktopBridge.scanWorkspace(workspacePath);
-      if (res.success) {
+      if (res && res.success && Array.isArray(res.repositories)) {
         const gitOnly = res.repositories.filter((r) => r.isGit);
         setDiscoveredRepos(gitOnly);
         setSelectedPaths(new Set(gitOnly.map((r) => r.path)));
-        setStep(4);
+      } else {
+        setDiscoveredRepos([]);
+        setSelectedPaths(new Set());
       }
+      setStep(4);
     } catch (e) {
       console.warn('Scan error:', e);
+      setDiscoveredRepos([]);
+      setSelectedPaths(new Set());
+      setStep(4);
     } finally {
       setIsScanning(false);
     }
@@ -454,19 +460,32 @@ export function OnboardingModal({ isOpen, onComplete }) {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <button onClick={() => setStep(3)} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button onClick={() => setStep(2)} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <ArrowLeft size={14} />
-                  <span>Back</span>
+                  <span>Back to Browse</span>
                 </button>
-                <button
-                  onClick={() => setStep(5)}
-                  disabled={selectedPaths.size === 0}
-                  className="btn btn-primary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-                >
-                  <span>Continue ({selectedPaths.size})</span>
-                  <ArrowRight size={14} />
-                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {discoveredRepos.length === 0 ? (
+                    <button
+                      onClick={handleSkip}
+                      className="btn btn-secondary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <span>Skip & Start Empty</span>
+                      <ArrowRight size={14} />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setStep(5)}
+                      disabled={selectedPaths.size === 0}
+                      className="btn btn-primary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <span>Continue ({selectedPaths.size})</span>
+                      <ArrowRight size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           )}
